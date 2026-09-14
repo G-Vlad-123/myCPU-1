@@ -1,5 +1,8 @@
 #![allow(unused)]
 
+#[cfg(test)]
+pub const ITER_BIT: [Bit; 2] = [Zero, One];
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Bit {
     Zero = 0,
@@ -66,10 +69,9 @@ impl Bit {
 
 impl std::fmt::Debug for Bit {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if formatter.alternate() {
-            write!(formatter, "Bit({})", *self as i32)
-        } else {
-            write!(formatter, "{}", *self as i32)
+        match formatter.alternate() {
+            false => write!(formatter, "{}", *self as i32),
+            true => write!(formatter, "Bit({})", *self as i32),
         }
     }
 }
