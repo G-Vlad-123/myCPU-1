@@ -18,6 +18,18 @@ impl Bit {
         }
     }
 
+    pub fn try_from_u8(u8: u8) -> Option<Bit> {
+        match u8 {
+            0 => Some(Zero),
+            1 => Some(One),
+            _ => None,
+        }
+    }
+
+    pub fn into_u8(self) -> u8 {
+        self.is_one() as u8
+    }
+
     pub fn is_one(self) -> bool {
         self == One
     }
