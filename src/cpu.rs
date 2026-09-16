@@ -9,7 +9,7 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub const REGISTER_COUNT: usize = 8;
+    pub const REGISTER_COUNT: usize = 16;
 
     pub fn new() -> CPU {
         CPU {
