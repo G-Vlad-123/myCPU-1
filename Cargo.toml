@@ -3,4 +3,5 @@ name = "myCPU-1"
 version = "0.0.1"
 edition = "2024"
 
-[dependecies]
+[dependencies]
+tap = "1.0.1"
