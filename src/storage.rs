@@ -1,3 +1,3 @@
-pub mod byte;
+mod byte;
 pub mod data;
 pub mod word;

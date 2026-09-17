@@ -9,7 +9,6 @@ pub struct Byte {
 // public items
 impl Byte {
     pub const ZEROED: Byte = Byte { inner: 0x00 };
-    pub const FILLED: Byte = Byte { inner: 0xFF };
 
     #[must_use]
     pub fn new(words: [word::Word; 2]) -> Byte {

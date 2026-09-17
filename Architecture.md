@@ -4,8 +4,9 @@ I have a tiny amount of expiriance hearing about x86 and RISC architectures but 
 # Architecture
 - `[register n]` = `n`
 - `[value n]` = `n`
-- `0000`: `mov [in register]  [value]`        = in register is set to the given value
+- `0000`: `end`                               = ends the program
 - `0001`: `mov [in register]  [out register]` = in register is set to the value of out register
+- `0001`: `mov [in register]  1111 [value]`   = in register is set to the given value
 - `0010`: `cmp [1st register] [2nd register]` = the first register is compater to the second, setting the cmp flags
 - `0011`: `smp [1st register] [2nd register]` = same as cmp but the values are assumed to be signed
 - `0100`: `jmp [1st address]  [2nd address]`  = jumps to the 8 bit address obtained by concatinating the two 4 bit addresses

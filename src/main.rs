@@ -7,6 +7,5 @@ fn main() {
 
     let mut data = storage::data::Data::new();
 
-    data.set_word(0, storage::word::Word::FILLED);
-    println!("{:?}", data.get_word(0))
+    
 }
