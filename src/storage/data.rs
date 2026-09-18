@@ -34,6 +34,19 @@ impl Data {
     }
 
     #[must_use]
+    fn from_slice(slice: &'static [u8]) -> Data {
+        use std::iter;
+        use std::ops::Sub;
+
+        Data {
+            inner: Box::from_iter(iter::chain(
+                slice.iter().copied().map(Byte::from_u8),
+                iter::repeat_n(Byte::ZEROED, Data::WORD_COUNT.sub(slice.len()).div_ceil(2)),
+            )),
+        }
+    }
+
+    #[must_use]
     pub fn get_word(&self, idx: usize) -> Word {
         let idx = Idx::compute(idx);
 
