@@ -18,6 +18,11 @@ impl Byte {
     }
 
     #[must_use]
+    pub(in crate::storage) fn from_u8(u8: u8) -> Byte {
+        Byte { inner: u8 }
+    }
+
+    #[must_use]
     pub fn into_words(self) -> [word::Word; 2] {
         let [a, b, c, d, e, f, g, h] = self.into_bits();
         [word::Word::new([a, b, c, d]), word::Word::new([e, f, g, h])]
@@ -64,6 +69,10 @@ impl Byte {
             1 => Some(self.set_second(word)),
             _ => None,
         }
+    }
+
+    pub fn into_u8(self) -> u8 {
+        self.inner
     }
 }
 

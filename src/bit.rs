@@ -41,6 +41,10 @@ impl Bit {
         self == Zero
     }
 
+    pub fn cmp(self, rhs: Bit) -> std::cmp::Ordering {
+        (self as u8).cmp(&(rhs as u8))
+    }
+
     pub fn not(self) -> Bit {
         match self {
             Zero => One,
@@ -64,6 +68,10 @@ impl Bit {
 
     pub fn xor(self, rhs: Bit) -> Bit {
         Bit::from_bool(self != rhs)
+    }
+
+    pub fn toggle(&mut self) {
+        *self = self.not();
     }
 }
 

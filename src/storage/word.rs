@@ -18,6 +18,13 @@ impl Word {
     }
 
     #[must_use]
+    #[cfg(test)]
+    /// Gets the least significant 4 bits of a u8
+    pub fn from_u8(u8: u8) -> Word {
+        Word { inner: u8 }
+    }
+
+    #[must_use]
     pub fn into_bits(self) -> [bit::Bit; 4] {
         // SAFETY: `ith_bit` is always lesser than 4
         unsafe {
@@ -28,6 +35,18 @@ impl Word {
                 self.get_bit(3).unwrap_unchecked(),
             ]
         }
+    }
+
+    #[must_use]
+    pub fn into_uint(self) -> crate::manipulation::UInt {
+        crate::manipulation::UInt::from_word(self)
+    }
+
+    #[must_use]
+    // #[cfg(test)]
+    /// Gets the least significant 4 bits of a u8
+    pub fn into_u8(self) -> u8 {
+        self.inner
     }
 
     /// Will return `None` if and only if `ith_bit` is greater than or equal to 4
@@ -63,6 +82,11 @@ impl std::fmt::Debug for Word {
             true => write!(formatter, "Word(0x{:1X})", self.inner),
         }
     }
+}
+
+pub fn pair_to_u8(high: Word, low: Word) -> u8 {
+    use crate::storage::byte::Byte;
+    Byte::new([high, low]).into_u8()
 }
 
 #[cfg(test)]
