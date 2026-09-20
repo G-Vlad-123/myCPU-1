@@ -1,5 +1,17 @@
+use tap::Pipe;
+
 use crate::bit;
 use crate::storage;
+
+pub fn modify_word(
+    uint_op: impl Fn(UInt, UInt) -> (UInt, Option<Overflow>),
+) -> impl Fn(&mut storage::Word, storage::Word) -> Option<Overflow> {
+    move |register, value| {
+        let (new_register_value, overflow) = uint_op(register.into_uint(), value.into_uint());
+        *register = new_register_value.into_word();
+        overflow
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UInt {
@@ -43,7 +55,7 @@ impl UInt {
         Overflow(overflow)
     }
 
-    pub fn decrement(&mut self) -> Underflow {
+    pub fn decrement(&mut self) -> Overflow {
         let mut underflow: bit::Bit = bit::One;
 
         for idx in (0usize..4).rev() {
@@ -53,7 +65,7 @@ impl UInt {
             ]
         }
 
-        Underflow(underflow)
+        Overflow(underflow)
     }
 
     pub fn cmp(self, rhs: UInt) -> std::cmp::Ordering {
@@ -69,12 +81,26 @@ impl UInt {
         Equal
     }
 
+    fn add_internal(self, rhs: UInt, overflow: bit::Bit) -> (UInt, Overflow) {
+        let (d, o) = bit_add_with_overflow(self.inner[3], rhs.inner[3], Overflow(overflow));
+        let (c, o) = bit_add_with_overflow(self.inner[2], rhs.inner[2], o);
+        let (b, o) = bit_add_with_overflow(self.inner[1], rhs.inner[1], o);
+        let (a, o) = bit_add_with_overflow(self.inner[0], rhs.inner[0], o);
+        (
+            UInt {
+                inner: [a, b, c, d],
+            },
+            o,
+        )
+    }
+
     pub fn add(self, rhs: UInt) -> (UInt, Overflow) {
-        todo!("implement `UInt::add`")
+        self.add_internal(rhs, bit::Zero)
     }
 
     pub fn sub(self, rhs: UInt) -> (UInt, Overflow) {
-        todo!("implement `UInt::sub`")
+        self.add_internal(rhs.not(), bit::One)
+            .pipe(|(uint, overflow)| (uint, Overflow(overflow.0)))
     }
 
     pub fn mul(self, rhs: UInt) -> (UInt, Overflow) {
@@ -84,6 +110,49 @@ impl UInt {
     pub fn div_rem(self, rhs: UInt) -> (UInt, UInt, Overflow) {
         todo!("implement `UInt::add`")
     }
+
+    pub fn not(self) -> UInt {
+        UInt {
+            inner: self.inner.map(bit::Bit::not),
+        }
+    }
+
+    pub fn and(self, rhs: UInt) -> UInt {
+        let op = |idx| bit::Bit::and(self.inner[idx], rhs.inner[idx]);
+
+        UInt {
+            inner: std::array::from_fn(op),
+        }
+    }
+
+    pub fn or(self, rhs: UInt) -> UInt {
+        let op = |idx| bit::Bit::or(self.inner[idx], rhs.inner[idx]);
+
+        UInt {
+            inner: std::array::from_fn(op),
+        }
+    }
+
+    pub fn xor(self, rhs: UInt) -> UInt {
+        let op = |idx| bit::Bit::xor(self.inner[idx], rhs.inner[idx]);
+
+        UInt {
+            inner: std::array::from_fn(op),
+        }
+    }
+}
+
+fn bit_add_with_overflow(
+    lhs: bit::Bit,
+    rhs: bit::Bit,
+    Overflow(overflow): Overflow,
+) -> (bit::Bit, Overflow) {
+    let (a, b, c) = (lhs.is_one(), rhs.is_one(), overflow.is_one());
+    let bit = bit::Bit::from_bool;
+    (
+        bit(a ^ b ^ c),
+        Overflow(bit((a && b) || (a && c) || (b && c))),
+    )
 }
 
 impl std::fmt::Debug for UInt {
@@ -93,7 +162,6 @@ impl std::fmt::Debug for UInt {
 }
 
 pub struct Overflow(pub bit::Bit);
-pub struct Underflow(pub bit::Bit);
 
 #[cfg(test)]
 mod testing {
@@ -166,5 +234,44 @@ mod testing {
         let underflow = min.decrement();
         assert_eq!(max, min);
         assert_eq!(underflow.0, bit::One);
+    }
+
+    #[test]
+    fn add() {
+        fn test(x: u8, y: u8) {
+            let a = UInt::from_u8(x);
+            let b = UInt::from_u8(y);
+            let (c, o) = a.add(b);
+            assert_eq!(c, UInt::from_u8((x + y) % 16));
+            assert_eq!(o.0.is_zero(), x + y < 16)
+        }
+
+        for x in 0..16 {
+            for y in 0..16 {
+                test(x, y)
+            }
+        }
+    }
+
+    #[test]
+    fn sub() {
+        fn test(x: u8, y: u8) {
+            let a = UInt::from_u8(x);
+            let b = UInt::from_u8(y);
+            let (c, o) = a.sub(b);
+            assert_eq!(b.add(c).0, a, "failed to subtract x = {x} and y = {y}");
+            assert_eq!(
+                o.0.is_zero(),
+                x <= y,
+                "failed underflow check, o = {:?}, x = {x} and y = {y}",
+                o.0
+            );
+        }
+
+        for x in 0..16 {
+            for y in 0..16 {
+                test(x, y)
+            }
+        }
     }
 }

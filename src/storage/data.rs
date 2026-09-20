@@ -88,6 +88,12 @@ impl Address {
         }
     }
 
+    #[cfg(test)]
+    pub fn from_u8(u8: u8) -> Address {
+        let [high, low] = Byte::from_u8(u8).into_words();
+        Address::new(high, low)
+    }
+
     pub fn increment(&mut self) -> manip::Overflow {
         if self.low.increment().0.is_one() {
             self.high.increment()
