@@ -104,7 +104,29 @@ impl UInt {
     }
 
     pub fn mul(self, rhs: UInt) -> (UInt, Overflow) {
-        todo!("implement `UInt::mul`")
+        let mut ret = if rhs.inner[0].is_one() {
+            self
+        } else {
+            UInt::ZERO
+        };
+
+        let mut overflow = Overflow(bit::Zero);
+
+        let mut add = |idx: usize| {
+            if rhs.inner[idx].is_one() {
+                let temp = ret.add(self);
+                ret = temp.0;
+                if temp.1.0.is_one() {
+                    overflow = Overflow(bit::One);
+                }
+            }
+        };
+
+        add(1);
+        add(2);
+        add(3);
+
+        (ret, overflow)
     }
 
     pub fn div_rem(self, rhs: UInt) -> (UInt, UInt, Overflow) {

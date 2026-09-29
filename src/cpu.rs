@@ -13,6 +13,25 @@ pub struct CPU {
     debug_analysys: bool,
 }
 
+fn input(prompt: &str, expected: &[&str]) -> String {
+    println!("{prompt}");
+    let mut read = String::new();
+    loop {
+        match std::io::stdin().read_line(&mut read) {
+            Ok(_) => match expected.contains(&read.trim()) {
+                true => {
+                    read.truncate(read.trim().len());
+                    return read;
+                }
+                false => println!(
+                    "Invalid syntax, only items from the following list are allowed:\n{expected:?}"
+                ),
+            },
+            Err(err) => println!("\nI/O error: {err}\n"),
+        }
+    }
+}
+
 impl CPU {
     pub const REGISTER_COUNT: usize = 15;
 
@@ -31,7 +50,13 @@ impl CPU {
             registers: [storage::Word::ZEROED; CPU::REGISTER_COUNT],
 
             #[cfg(debug_assertions)]
-            debug_analysys: { todo!("Add debug analysys prompt") },
+            debug_analysys: match input("Enable debug analysys (Y/n):", &["", "y", "Y", "n", "N"])
+                .as_str()
+            {
+                "" | "y" | "Y" => true,
+                "n" | "N" => false,
+                _ => unreachable!(),
+            },
         }
     }
 
@@ -60,8 +85,21 @@ impl CPU {
             };
 
             #[cfg(debug_assertions)]
-            if self.debug_analysys {
-                println!("{self:?}\n")
+            'dbg: {
+                if !self.debug_analysys {
+                    break 'dbg;
+                }
+
+                let cont_response = input("Continue (Y/n):", &["", "y", "Y", "n", "N"]);
+
+                println!("\n{self:#?}\n");
+
+                match cont_response.as_str() {
+                    "n" | "N" => (),
+                    _ => break 'dbg,
+                }
+
+                return Ok(());
             }
 
             for _ in 0..step {
@@ -352,7 +390,7 @@ mod testing {
     #[test]
     fn r#move() -> Result<(), CpuError> {
         //                                        r1 = 6      r2 = f;     r3 = r2;r4 = 3;
-        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xff, 0x13, 0x21, 0x42])?;
+        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xff, 0x13, 0x21, 0x4f, 0x30])?;
         assert_eq!(final_state.registers[0x1].into_u8(), 0x6, "r1 == 6");
         assert_eq!(final_state.registers[0x2].into_u8(), 0xf, "r2 == f");
         assert_eq!(final_state.registers[0x3].into_u8(), 0xf, "r3 == f");
