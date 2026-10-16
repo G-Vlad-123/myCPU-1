@@ -110,7 +110,7 @@ impl Address {
         self
     }
 
-    pub fn jump(&mut self, high: Word, low: Word) {
+    pub fn jump_to(&mut self, high: Word, low: Word) {
         self.high = manip::UInt::from_word(high);
         self.low = manip::UInt::from_word(low);
     }

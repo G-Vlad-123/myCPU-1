@@ -18,6 +18,7 @@ impl Byte {
     }
 
     #[must_use]
+    #[cfg(test)]
     pub(in crate::storage) fn from_u8(u8: u8) -> Byte {
         Byte { inner: u8 }
     }

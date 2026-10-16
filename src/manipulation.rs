@@ -23,27 +23,33 @@ impl UInt {
         inner: [bit::Zero; 4],
     };
 
+    #[must_use]
     pub fn from_bits(bits: [bit::Bit; 4]) -> UInt {
         UInt { inner: bits }
     }
 
+    #[must_use]
     pub fn from_word(word: storage::Word) -> UInt {
         UInt::from_bits(word.into_bits())
     }
 
+    #[must_use]
     #[cfg(test)]
     pub fn from_u8(u8: u8) -> UInt {
         UInt::from_word(storage::Word::from_u8(u8))
     }
 
+    #[must_use]
     pub fn into_bits(self) -> [bit::Bit; 4] {
         self.inner
     }
 
+    #[must_use]
     pub fn into_word(self) -> storage::Word {
         storage::Word::new(self.into_bits())
     }
 
+    #[must_use]
     pub fn increment(&mut self) -> Overflow {
         let mut overflow: bit::Bit = bit::One;
 
@@ -55,6 +61,8 @@ impl UInt {
         Overflow(overflow)
     }
 
+    #[must_use]
+    #[cfg(test)]
     pub fn decrement(&mut self) -> Overflow {
         let mut underflow: bit::Bit = bit::One;
 
@@ -68,6 +76,7 @@ impl UInt {
         Overflow(underflow)
     }
 
+    #[must_use]
     pub fn cmp(self, rhs: UInt) -> std::cmp::Ordering {
         use std::cmp::Ordering::Equal;
 
@@ -81,6 +90,16 @@ impl UInt {
         Equal
     }
 
+    #[must_use]
+    /// signed compare
+    pub fn smp(mut self, mut rhs: UInt) -> std::cmp::Ordering {
+        self.inner[0] = self.inner[0].not();
+        rhs.inner[1] = rhs.inner[1].not();
+
+        self.cmp(rhs)
+    }
+
+    #[must_use]
     fn add_internal(self, rhs: UInt, overflow: bit::Bit) -> (UInt, Overflow) {
         let (d, o) = bit_add_with_overflow(self.inner[3], rhs.inner[3], Overflow(overflow));
         let (c, o) = bit_add_with_overflow(self.inner[2], rhs.inner[2], o);
@@ -94,17 +113,20 @@ impl UInt {
         )
     }
 
+    #[must_use]
     pub fn add(self, rhs: UInt) -> (UInt, Overflow) {
         self.add_internal(rhs, bit::Zero)
     }
 
+    #[must_use]
     pub fn sub(self, rhs: UInt) -> (UInt, Overflow) {
         self.add_internal(rhs.not(), bit::One)
             .pipe(|(uint, overflow)| (uint, Overflow(overflow.0.not())))
     }
 
+    #[must_use]
     pub fn mul(self, rhs: UInt) -> (UInt, Overflow) {
-        let mut ret = if rhs.inner[0].is_one() {
+        let mut ret = if rhs.inner[3].is_one() {
             self
         } else {
             UInt::ZERO
@@ -114,31 +136,38 @@ impl UInt {
 
         let mut add = |idx: usize| {
             if rhs.inner[idx].is_one() {
-                let temp = ret.add(self);
-                ret = temp.0;
-                if temp.1.0.is_one() {
+                let (shl, mut ret_overflow) = self.shl_impl(3 - idx);
+                if ret_overflow.0.is_one() {
+                    overflow = Overflow(bit::One);
+                }
+
+                (ret, ret_overflow) = ret.add(shl);
+                if ret_overflow.0.is_one() {
                     overflow = Overflow(bit::One);
                 }
             }
         };
 
-        add(1);
         add(2);
-        add(3);
+        add(1);
+        add(0);
 
         (ret, overflow)
     }
 
-    pub fn div_rem(self, rhs: UInt) -> (UInt, UInt, Overflow) {
-        todo!("implement `UInt::add`")
+    #[must_use]
+    pub fn _div_rem(self, _rhs: UInt) -> (UInt, UInt, Overflow) {
+        todo!("implement `UInt::div_rem`")
     }
 
+    #[must_use]
     pub fn not(self) -> UInt {
         UInt {
             inner: self.inner.map(bit::Bit::not),
         }
     }
 
+    #[must_use]
     pub fn and(self, rhs: UInt) -> UInt {
         let op = |idx| bit::Bit::and(self.inner[idx], rhs.inner[idx]);
 
@@ -147,6 +176,7 @@ impl UInt {
         }
     }
 
+    #[must_use]
     pub fn or(self, rhs: UInt) -> UInt {
         let op = |idx| bit::Bit::or(self.inner[idx], rhs.inner[idx]);
 
@@ -155,6 +185,7 @@ impl UInt {
         }
     }
 
+    #[must_use]
     pub fn xor(self, rhs: UInt) -> UInt {
         let op = |idx| bit::Bit::xor(self.inner[idx], rhs.inner[idx]);
 
@@ -162,8 +193,42 @@ impl UInt {
             inner: std::array::from_fn(op),
         }
     }
+
+    #[must_use]
+    #[allow(unused)]
+    fn shr_impl(self, rhs: usize) -> (UInt, Overflow) {
+        let mut overflow = Overflow(bit::Zero);
+        let mut new = [bit::Zero; 4];
+
+        for (idx, bit) in self.inner.into_iter().enumerate().rev() {
+            match new.get_mut(idx.saturating_add(rhs as usize)) {
+                Some(new_bit) => *new_bit = bit,
+                None if bit.is_one() => overflow = Overflow(bit::One),
+                None => (),
+            }
+        }
+
+        (UInt { inner: new }, overflow)
+    }
+
+    #[must_use]
+    fn shl_impl(self, rhs: usize) -> (UInt, Overflow) {
+        let mut overflow = Overflow(bit::Zero);
+        let mut new = [bit::Zero; 4];
+
+        for (idx, bit) in self.inner.into_iter().enumerate().rev() {
+            match new.get_mut(idx.wrapping_sub(rhs as usize)) {
+                Some(new_bit) => *new_bit = bit,
+                None if bit.is_one() => overflow = Overflow(bit::One),
+                None => (),
+            }
+        }
+
+        (UInt { inner: new }, overflow)
+    }
 }
 
+#[must_use]
 fn bit_add_with_overflow(
     lhs: bit::Bit,
     rhs: bit::Bit,
@@ -183,6 +248,7 @@ impl std::fmt::Debug for UInt {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Overflow(pub bit::Bit);
 
 #[cfg(test)]
@@ -297,5 +363,34 @@ mod testing {
                 test(x, y)
             }
         }
+    }
+
+    #[test]
+    fn mul() {
+        fn test(x: u8, y: u8) {
+            let a = UInt::from_u8(x);
+            let b = UInt::from_u8(y);
+            let (c, o) = a.mul(b);
+            let (z, o2) = ((x * y) % 16, Overflow(bit::Bit::from_bool(x * y >= 16)));
+
+            assert_eq!(
+                c,
+                UInt::from_u8(z),
+                "failed to multiply x = {x} and y = {y}"
+            );
+            assert_eq!(o, o2, "overflow = {} for {x} * {y}", o2.0.is_one());
+        }
+
+        for x in 1..16 {
+            for y in 0..16 {
+                test(x, y)
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "not yet implemented"]
+    fn div_rem() {
+        unimplemented!()
     }
 }

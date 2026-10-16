@@ -8,7 +8,6 @@ pub struct Word {
 
 impl Word {
     pub const ZEROED: Word = Word { inner: 0x00 };
-    pub const FILLED: Word = Word { inner: 0x0F };
 
     #[must_use]
     pub fn new(bits: [bit::Bit; 4]) -> Word {
@@ -49,8 +48,8 @@ impl Word {
         self.inner
     }
 
-    /// Will return `None` if and only if `ith_bit` is greater than or equal to 4
     #[must_use]
+    /// Will return `None` if and only if `ith_bit` is greater than or equal to 4
     pub fn get_bit(self, ith_bit: u8) -> Option<bit::Bit> {
         match ith_bit {
             ..4 => bit::Bit::try_from_u8(self.inner.unbounded_shr(3 - ith_bit as u32).bitand(1)),
@@ -58,6 +57,7 @@ impl Word {
         }
     }
 
+    #[cfg(test)]
     /// Will return `None` if and only if `ith_bit` is greater than or equal to 4
     pub fn set_bit(&mut self, ith_bit: u8, bit: bit::Bit) -> Option<bit::Bit> {
         match ith_bit {
