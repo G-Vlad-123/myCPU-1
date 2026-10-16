@@ -100,7 +100,7 @@ impl UInt {
 
     pub fn sub(self, rhs: UInt) -> (UInt, Overflow) {
         self.add_internal(rhs.not(), bit::One)
-            .pipe(|(uint, overflow)| (uint, Overflow(overflow.0)))
+            .pipe(|(uint, overflow)| (uint, Overflow(overflow.0.not())))
     }
 
     pub fn mul(self, rhs: UInt) -> (UInt, Overflow) {
@@ -282,12 +282,14 @@ mod testing {
             let b = UInt::from_u8(y);
             let (c, o) = a.sub(b);
             assert_eq!(b.add(c).0, a, "failed to subtract x = {x} and y = {y}");
-            assert_eq!(
-                o.0.is_zero(),
-                x <= y,
-                "failed underflow check, o = {:?}, x = {x} and y = {y}",
-                o.0
-            );
+
+            use std::cmp::Ordering;
+            match a.cmp(b) {
+                Ordering::Less => assert_eq!(o.0, bit::One, "overflow = false for {x} - {y}"),
+                Ordering::Greater | Ordering::Equal => {
+                    assert_eq!(o.0, bit::Zero, "overflow = true for {x} - {y}")
+                }
+            }
         }
 
         for x in 0..16 {
