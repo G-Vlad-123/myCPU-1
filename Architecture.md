@@ -13,13 +13,13 @@ All values are big edian
 - 2 `0010`: `cmp [1st register] [2nd register]`                = the first register is compater to the second, setting the cmp flags
 - 3 `0011`: `smp [1st register] [2nd register]`                = same as cmp but the values are assumed to be signed
 - 4 `0100`: `jmp [1st address]  [2nd address]`                 = jumps to the 8 bit address obtained by concatinating the two 4 bit addresses
-- 5 `0101`: `skp [cmp check]    [valid check]`                 = jumps over the next instruction if the "check holds"
-- 6 `0110`: `get [in register]  [1st address]  [2nd address]`  = in register is set by the value at the given address
-- 7 `0111`: `set [in register]  [1st address]  [2nd address]`  = the value at the given address is set by the value in the in register
+- 5 `0101`: `skp [cmp check]`                                  = jumps over the next instruction if the "check holds"
+- 6 `0110`: `get [in register]  [1st address]  [2nd address]`  = in register gets the value at the given address
+- 7 `0111`: `set [in register]  [1st address]  [2nd address]`  = in register sets the value at the given address
 - 8 `1000`: `add [in register]  [out register]`                = in register is increased (overflowing) by the out register
 - 9 `1001`: `sub [in register]  [out register]`                = in register is decreased (underflowing) by the value of out register
 - A `1010`: `mul [in register]  [out register]`                = in register is scaled (overflowing) by the out register
-- B`1011`: `div [div register] [rem register] [out register]` = div register is divibed by the value of the out register, the remained is put in the rem register
+- B `1011`: `div [div register] [rem register] [out register]` = div register is divibed by the value of the out register, the remained is put in the rem register
 - C `1100`: `not [in register]  [out register]`                = in register is set to the bitwise-not of the value of out register
 - D `1101`: `and [in register]  [out register]`                = in register is set to it's value bitwise and'ed by the out register
 - E `1110`: `or  [in register]  [out register]`                = in register is set to it's value bitwise or'ed by the out register
@@ -29,6 +29,12 @@ All integers are unsigned unless specified otherwise.
 
 When dividing or setting the modulus by 0 the `invalid` flag will be set to true*
 
-skp checking will be fully defined later on*
+skp checking:
+- jumps over the next instruction if any of the given flags are set or not
+- The flags are as follows (within the `cmp check` in big edian order):
+  - 1: Did the last op result in `left register` greater than `value`/`right register`
+  - 2: Did the last op result in `left register` being equal to `value`/`right register`
+  - 3: Did the last op result in an overflow (or underflow for subtraction)
+  - 4: Was the last div a division by zero
 
 *This is up to change

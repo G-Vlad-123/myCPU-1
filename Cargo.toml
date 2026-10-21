@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 tap = "1.0.1"
+
+[features]
+force-debug = []
+disable-debug = []

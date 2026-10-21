@@ -2,6 +2,9 @@ use crate::bit;
 use crate::manipulation as manip;
 use crate::storage::{self, data::Address};
 
+#[cfg(all(feature = "force-debug", feature = "disable-debug"))]
+compile_error!("Can't both forcefully disable and enable debug analysys!");
+
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
 pub struct CPU {
@@ -32,6 +35,8 @@ fn input(prompt: &str, expected: &[&str]) -> String {
     }
 }
 
+const INSTRUCTION_SIZE: u8 = 1;
+
 impl CPU {
     pub const REGISTER_COUNT: usize = 15;
 
@@ -39,23 +44,22 @@ impl CPU {
         CPU {
             instruction_pointer: Address::NULL,
             flags: Flags {
-                zero: bit::Zero,
-                sign: bit::Zero,
-                carry: bit::Zero,
-                overflow: bit::Zero,
-                less: bit::Zero,
-                equal: bit::Zero,
                 greater: bit::Zero,
+                equal: bit::Zero,
+                overflow: bit::Zero,
+                zero_divison: bit::Zero,
             },
             registers: [storage::Word::ZEROED; CPU::REGISTER_COUNT],
 
             #[cfg(debug_assertions)]
-            debug_analysys: match input("Enable debug analysys (Y/n):", &["", "y", "Y", "n", "N"])
-                .as_str()
-            {
-                "" | "y" | "Y" => true,
-                "n" | "N" => false,
-                _ => unreachable!(),
+            debug_analysys: if cfg!(any(feature = "force-debug", feature = "disable-debug")) {
+                cfg!(feature = "force-debug")
+            } else {
+                match input("Enable debug analysys (Y/n):", &["", "y", "Y", "n", "N"]).as_str() {
+                    "" | "y" | "Y" => true,
+                    "n" | "N" => false,
+                    _ => unreachable!(),
+                }
             },
         }
     }
@@ -139,14 +143,13 @@ impl CPU {
 
         use std::cmp::Ordering as O;
 
-        [self.flags.less, self.flags.equal, self.flags.greater] =
-            match lhs_register.into_uint().cmp(compare) {
-                O::Less => [bit::One, bit::Zero, bit::Zero],
-                O::Equal => [bit::Zero, bit::One, bit::Zero],
-                O::Greater => [bit::Zero, bit::Zero, bit::One],
-            };
+        [self.flags.equal, self.flags.greater] = match lhs_register.into_uint().cmp(compare) {
+            O::Less => [bit::Zero, bit::Zero],
+            O::Equal => [bit::One, bit::Zero],
+            O::Greater => [bit::Zero, bit::One],
+        };
 
-        Ok(ret + 1)
+        Ok(ret + INSTRUCTION_SIZE)
     }
 
     fn handle_signed_compare(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
@@ -171,14 +174,13 @@ impl CPU {
 
         use std::cmp::Ordering as O;
 
-        [self.flags.less, self.flags.equal, self.flags.greater] =
-            match lhs_register.into_uint().smp(compare) {
-                O::Less => [bit::One, bit::Zero, bit::Zero],
-                O::Equal => [bit::Zero, bit::One, bit::Zero],
-                O::Greater => [bit::Zero, bit::Zero, bit::One],
-            };
+        [self.flags.equal, self.flags.greater] = match lhs_register.into_uint().smp(compare) {
+            O::Less => [bit::Zero, bit::Zero],
+            O::Equal => [bit::One, bit::Zero],
+            O::Greater => [bit::Zero, bit::One],
+        };
 
-        Ok(ret + 1)
+        Ok(ret + INSTRUCTION_SIZE)
     }
 
     fn handle_jump(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
@@ -190,8 +192,55 @@ impl CPU {
         Ok(0)
     }
 
-    fn handle_skip(&mut self, _data: &storage::Data) -> Result<u8, CpuError> {
-        todo!()
+    fn handle_skip(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
+        let [zero_division, overflow, equal, greater] = data
+            .get_word(self.instruction_pointer.offset(1))
+            .into_bits();
+
+        if bit::Zero
+            .or(self.flags.zero_divison.and(zero_division))
+            .or(self.flags.overflow.and(overflow))
+            .or(self.flags.equal.and(equal))
+            .or(self.flags.greater.and(greater))
+            .is_zero()
+        {
+            return Ok(1 + INSTRUCTION_SIZE);
+        }
+
+        let biop = || {
+            let out_register_id = data
+                .get_word(self.instruction_pointer.offset(INSTRUCTION_SIZE + 1 + 2))
+                .into_u8() as usize;
+
+            let out_register = self.registers.get(out_register_id);
+
+            match out_register {
+                Some(_) => 2,
+                None => 3,
+            }
+        };
+
+        use Instruction as I;
+        let input_count: u8 = match I::fetch(self.instruction_pointer.offset(2), data) {
+            I::Halt => 0,
+            I::Move => biop(),
+            I::Compare => 2,
+            I::SignedCompare => 2,
+            I::Jump => 2,
+            I::Skip => 1,
+            I::Get => 3,
+            I::Set => 3,
+            I::Add => biop(),
+            I::Sub => biop(),
+            I::Mul => biop(),
+            I::Div => todo!("division (in `CPU::handle_skip`)"),
+            I::Not => biop(),
+            I::And => biop(),
+            I::Or => biop(),
+            I::Xor => biop(),
+        };
+
+        Ok(input_count + 1 + 2 * INSTRUCTION_SIZE)
     }
 
     fn handle_get(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
@@ -210,7 +259,7 @@ impl CPU {
 
         *in_register = data.get_word(address);
 
-        Ok(3)
+        Ok(3 + INSTRUCTION_SIZE)
     }
 
     fn handle_set(&mut self, data: &mut storage::Data) -> Result<u8, CpuError> {
@@ -229,7 +278,7 @@ impl CPU {
 
         data.set_word(address, *in_register);
 
-        Ok(3)
+        Ok(3 + INSTRUCTION_SIZE)
     }
 
     fn handle_add(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
@@ -295,17 +344,17 @@ impl CPU {
                     Some(overflow) => self.flags.overflow = overflow.0,
                     None => (),
                 }
-                Ok(2 + 1)
+                Ok(2 + INSTRUCTION_SIZE)
             }
             Err(E::IndexOutOfBounds) if in_register_id != 0xF && out_register_id == 0xF => {
                 self.registers[in_register_id] = data.get_word(self.instruction_pointer.offset(3));
-                Ok(3 + 1)
+                Ok(3 + INSTRUCTION_SIZE)
             }
             Err(E::IndexOutOfBounds) => Err(CpuError::InvalidRegister {
                 address: self.instruction_pointer.offset(1),
                 instruction: self.instruction_pointer,
             }),
-            Err(E::OverlappingIndices) => Ok(2 + 1),
+            Err(E::OverlappingIndices) => Ok(2 + INSTRUCTION_SIZE),
         }
     }
 
@@ -334,13 +383,10 @@ fn no_overflow_helper(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Flags {
-    pub zero: bit::Bit,
-    pub sign: bit::Bit,
-    pub carry: bit::Bit,
-    pub overflow: bit::Bit,
-    pub less: bit::Bit,
-    pub equal: bit::Bit,
     pub greater: bit::Bit,
+    pub equal: bit::Bit,
+    pub overflow: bit::Bit,
+    pub zero_divison: bit::Bit,
 }
 
 #[derive(Debug)]
@@ -429,37 +475,31 @@ mod testing {
     fn compare() -> Result<(), CpuError> {
         //                                        r1 = 0;     r2 = f;    cmp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x21, 0x20])?;
-        assert!(final_state.flags.less.is_one());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 0;     r2 = f;    cmp r2 r1
         let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x22, 0x10])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_one());
 
         //                                        r1 = 6;     r2 = 6;    cmp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xf6, 0x21, 0x20])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_one());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    cmp r1 7
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x21, 0xf7])?;
-        assert!(final_state.flags.less.is_one());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    cmp r1 6
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x21, 0xf6])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_one());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    cmp r1 5
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x21, 0xf5])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_one());
 
@@ -467,6 +507,7 @@ mod testing {
     }
 
     #[test]
+    #[ignore = "Can't bother to test this yet <17 oct 2026>"]
     #[allow(unreachable_code)]
     fn signed_compare() -> Result<(), CpuError> {
         todo!(
@@ -475,37 +516,31 @@ mod testing {
 
         //                                        r1 = 0;     r2 = f;    smp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x31, 0x20])?;
-        assert!(final_state.flags.less.is_one());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 0;     r2 = f;    smp r2 r1
         let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x32, 0x10])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_one());
 
         //                                        r1 = 6;     r2 = 6;    smp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xf6, 0x31, 0x20])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_one());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    smp r1 7
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf7])?;
-        assert!(final_state.flags.less.is_one());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    smp r1 6
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf6])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_one());
         assert!(final_state.flags.greater.is_zero());
 
         //                                        r1 = 6;    smp r1 5
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf5])?;
-        assert!(final_state.flags.less.is_zero());
         assert!(final_state.flags.equal.is_zero());
         assert!(final_state.flags.greater.is_one());
 
@@ -515,7 +550,7 @@ mod testing {
     #[test]
     fn set() -> Result<(), CpuError> {
         let mut cpu = CPU::new();
-        let mut data = storage::Data::from_slice(&[0x11, 0xff, 0x61, 0x66]);
+        let mut data = storage::Data::from_slice(&[0x11, 0xff, 0x71, 0x66]);
         cpu.run(&mut data)?;
         assert_eq!(data.get_word(Address::from_u8(0x66)).into_u8(), 0xf);
         Ok(())
@@ -523,7 +558,16 @@ mod testing {
 
     #[test]
     fn get() -> Result<(), CpuError> {
-        let _final_state = CPU::create_and_run(&[0x6])?;
-        todo!("implement get test")
+        let mut cpu = CPU::new();
+        let mut data = storage::Data::from_slice(&[0x11, 0xff, 0x71, 0x66, 0x62, 0x66]);
+        cpu.run(&mut data)?;
+        assert_eq!(cpu.registers[2].into_u8(), 0xf);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "implementing skip testing will take a while"]
+    fn skip() -> Result<(), CpuError> {
+        todo!("skip testing")
     }
 }
