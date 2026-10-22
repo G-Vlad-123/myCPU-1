@@ -43,12 +43,7 @@ impl CPU {
     pub fn new() -> CPU {
         CPU {
             instruction_pointer: Address::NULL,
-            flags: Flags {
-                greater: bit::Zero,
-                equal: bit::Zero,
-                overflow: bit::Zero,
-                zero_divison: bit::Zero,
-            },
+            flags: Flags::ZEROED,
             registers: [storage::Word::ZEROED; CPU::REGISTER_COUNT],
 
             #[cfg(debug_assertions)]
@@ -293,8 +288,71 @@ impl CPU {
         self.handle_biop(data, manip::modify_word(overflow_helper(manip::UInt::mul)))
     }
 
-    fn handle_div(&mut self, _data: &storage::Data) -> Result<u8, CpuError> {
-        todo!("implement `CPU::div`")
+    fn handle_div(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
+        let div_register_id = data.get_word(self.instruction_pointer.offset(1)).into_u8() as usize;
+        let rem_register_id = data.get_word(self.instruction_pointer.offset(2)).into_u8() as usize;
+        let out_register_id = data.get_word(self.instruction_pointer.offset(3)).into_u8() as usize;
+
+        self.flags.zero_divison = bit::Zero;
+
+        fn division(
+            div: &mut storage::Word,
+            rem: Option<&mut storage::Word>,
+            by: storage::Word,
+            overflow: &mut bit::Bit,
+        ) {
+            let result = div.into_uint().div_rem(by.into_uint());
+            *div = result.0.into_word();
+            if let Some(rem) = rem {
+                *rem = result.1.into_word();
+            };
+            *overflow = result.2.0;
+        }
+
+        let invalid_register = |offset| CpuError::InvalidRegister {
+            address: self.instruction_pointer.offset(offset),
+            instruction: self.instruction_pointer,
+        };
+
+        let invalid_register_disjoint = |offset| |_| invalid_register(offset);
+
+        if div_register_id == rem_register_id && div_register_id == out_register_id {
+            let divisor = self
+                .registers
+                .get_mut(div_register_id)
+                .ok_or(invalid_register(1))?;
+            division(divisor, None, *divisor, &mut self.flags.overflow);
+            return Ok(3 + INSTRUCTION_SIZE);
+        }
+
+        if div_register_id == rem_register_id {
+            let (dividant, arg_count) = match self.registers.get(out_register_id) {
+                Some(&dividant) => (dividant, 3),
+                None => (data.get_word(self.instruction_pointer.offset(4)), 4),
+            };
+
+            let divisor = self
+                .registers
+                .get_mut(div_register_id)
+                .ok_or(invalid_register(1))?;
+
+            division(divisor, None, dividant, &mut self.flags.overflow);
+
+            return Ok(arg_count + INSTRUCTION_SIZE);
+        }
+
+        if div_register_id == out_register_id {
+            let [divisor, reminder] = self
+                .registers
+                .get_disjoint_mut([div_register_id, rem_register_id])
+                .map_err(invalid_register_disjoint(1))?;
+
+            division(divisor, Some(reminder), *divisor, &mut self.flags.overflow);
+
+            return Ok(3 + INSTRUCTION_SIZE);
+        }
+
+        todo!("`CPU::handle_div`: Handle other division stuff")
     }
 
     fn handle_not(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
@@ -333,28 +391,42 @@ impl CPU {
         let in_register_id = data.get_word(self.instruction_pointer.offset(1)).into_u8() as usize;
         let out_register_id = data.get_word(self.instruction_pointer.offset(2)).into_u8() as usize;
 
+        let mut biop = |in_register, out_register| match biop(in_register, out_register) {
+            Some(overflow) => self.flags.overflow = overflow.0,
+            None => (),
+        };
+
+        if in_register_id == out_register_id {
+            let register = &mut self.registers[in_register_id];
+            biop(register, *register);
+            return Ok(2 + INSTRUCTION_SIZE);
+        }
+
+        // Is there a better way to do this? Probably...
+        // But I don't caaaaaaaaare
+        if in_register_id != 0xF && out_register_id == 0xF {
+            let value = data.get_word(self.instruction_pointer.offset(3));
+            biop(&mut self.registers[in_register_id], value);
+            return Ok(3 + INSTRUCTION_SIZE);
+        }
+
         use std::slice::GetDisjointMutError as E;
 
         match self
             .registers
             .get_disjoint_mut([in_register_id, out_register_id])
         {
-            Ok([in_register, out_register]) => {
-                match biop(in_register, *out_register) {
-                    Some(overflow) => self.flags.overflow = overflow.0,
-                    None => (),
-                }
-                Ok(2 + INSTRUCTION_SIZE)
-            }
-            Err(E::IndexOutOfBounds) if in_register_id != 0xF && out_register_id == 0xF => {
-                self.registers[in_register_id] = data.get_word(self.instruction_pointer.offset(3));
-                Ok(3 + INSTRUCTION_SIZE)
+            Ok([in_register, &mut out_register]) => {
+                biop(in_register, out_register);
+                return Ok(2 + INSTRUCTION_SIZE);
             }
             Err(E::IndexOutOfBounds) => Err(CpuError::InvalidRegister {
                 address: self.instruction_pointer.offset(1),
                 instruction: self.instruction_pointer,
             }),
-            Err(E::OverlappingIndices) => Ok(2 + INSTRUCTION_SIZE),
+            Err(E::OverlappingIndices) => {
+                unreachable!("`CPU::handle_biop`: Already checked for overlapping indecies")
+            }
         }
     }
 
@@ -387,6 +459,15 @@ pub struct Flags {
     pub equal: bit::Bit,
     pub overflow: bit::Bit,
     pub zero_divison: bit::Bit,
+}
+
+impl Flags {
+    pub const ZEROED: Flags = Flags {
+        greater: bit::Zero,
+        equal: bit::Zero,
+        overflow: bit::Zero,
+        zero_divison: bit::Zero,
+    };
 }
 
 #[derive(Debug)]

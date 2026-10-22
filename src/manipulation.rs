@@ -156,7 +156,7 @@ impl UInt {
     }
 
     #[must_use]
-    pub fn _div_rem(self, _rhs: UInt) -> (UInt, UInt, Overflow) {
+    pub fn div_rem(self, _rhs: UInt) -> (UInt, UInt, Overflow) {
         todo!("implement `UInt::div_rem`")
     }
 
