@@ -37,4 +37,7 @@ skp checking:
   - 3: Did the last op result in an overflow (or underflow for subtraction)
   - 4: Was the last div a division by zero
 
+div extra specification:
+- if `div register` and `rem register` are the same than the register will be set to the davlue of the division, not reminder
+
 *This is up to change
