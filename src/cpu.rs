@@ -314,7 +314,8 @@ impl CPU {
             instruction: self.instruction_pointer,
         };
 
-        let invalid_register_disjoint = |offset| |_| invalid_register(offset);
+        let invalid_register_disjoint =
+            |offset| move |_: std::slice::GetDisjointMutError| invalid_register(offset);
 
         if div_register_id == rem_register_id && div_register_id == out_register_id {
             let divisor = self
