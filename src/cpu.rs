@@ -739,8 +739,70 @@ mod testing {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn division() -> Result<(), CpuError> {
-        todo!("test cpu::testing::division")
+        // d(a, b, c) = `a = a / c and b = a % c`
+
+        //                                        r1 = 7;     r3 = 2;   d(r1, r2, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf2, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7 / 2, "7 / 2");
+        assert_eq!(final_state.registers[2].into_u8(), 7 % 2, "7 % 2");
+
+        //                                        r1 = 6;     r3 = 2;   d(r1, r2, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x13, 0xf2, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 6 / 2, "6 / 2");
+        assert_eq!(final_state.registers[2].into_u8(), 6 % 2, "6 % 2");
+
+        //                                        r1 = 3;     r3 = 5;   d(r1, r2, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf3, 0x13, 0xf5, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 3 / 5, "3 / 5");
+        assert_eq!(final_state.registers[2].into_u8(), 3 % 5, "3 % 5");
+
+        //                                        r1 = 4;     r3 = 4;   d(r1, r2, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf4, 0x13, 0xf4, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 4 / 4, "4 / 4");
+        assert_eq!(final_state.registers[2].into_u8(), 4 % 4, "4 % 4");
+
+        //                                        r1 = 7;   d(r1, r2, 2);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0xb1, 0x2f, 0x20])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7 / 2, "/: const divident");
+        assert_eq!(final_state.registers[2].into_u8(), 7 % 2, "%: const divident");
+
+        //                                        r1 = 7;     r3 = 2;   d(r1, r1, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf2, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7 / 2, "/: div == rem");
+        assert_eq!(final_state.registers[2].into_u8(), 7 % 2, "%: div == rem");
+
+        //                                        r1 = 7;   d(r1, r1, 2);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0xb1, 0x1f, 0x20])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7 / 7, "/: div == rem && const divident");
+        assert_eq!(final_state.registers[2].into_u8(), 7 % 7, "%: div == rem && const divident");
+
+        //                                        r1 = 7;     r3 = 0;   d(r1, r2, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf0, 0xb1, 0x23])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7, "/: divident == 0");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: divident == 0");
+        assert_eq!(final_state.flags.zero_divison, bit::One, "zero division flag");
+
+        //                                        r1 = 7;   d(r1, r2, 0);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0xb1, 0x2f, 0x00])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7, "/: const divident == 0");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: const divident == 0");
+        assert_eq!(final_state.flags.zero_divison, bit::One, "const zero division flag");
+
+        //                                        r1 = 7;     r3 = 0;   d(r1, r1, r3);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf0, 0xb1, 0x13])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7, "/: div == rem && divident == 0");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: div == rem && divident == 0");
+        assert_eq!(final_state.flags.zero_divison, bit::One, "div == rem && zero division flag");
+
+        //                                        r1 = 7;   d(r1, r1, 0);
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0xb1, 0x1f, 0x00])?;
+        assert_eq!(final_state.registers[1].into_u8(), 7, "/: div == rem && const divident == 0");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: div == rem && const divident == 0");
+        assert_eq!(final_state.flags.zero_divison, bit::One, "div == rem && const zero division flag");
+
+        Ok(())
     }
 
     #[test]
