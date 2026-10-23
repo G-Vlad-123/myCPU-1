@@ -314,8 +314,9 @@ impl CPU {
             instruction: self.instruction_pointer,
         };
 
-        let invalid_register_disjoint =
-            |offset| move |_: std::slice::GetDisjointMutError| invalid_register(offset);
+        let invalid_register_disjoint = move |_: std::slice::GetDisjointMutError| {
+            invalid_register(if div_register_id == 0xF { 1 } else { 2 })
+        };
 
         if div_register_id == rem_register_id && div_register_id == out_register_id {
             let divisor = self
@@ -346,14 +347,45 @@ impl CPU {
             let [divisor, reminder] = self
                 .registers
                 .get_disjoint_mut([div_register_id, rem_register_id])
-                .map_err(invalid_register_disjoint(1))?;
+                .map_err(invalid_register_disjoint)?;
 
             division(divisor, Some(reminder), *divisor, &mut self.flags.overflow);
 
             return Ok(3 + INSTRUCTION_SIZE);
         }
 
-        todo!("`CPU::handle_div`: Handle other division stuff")
+        if rem_register_id == out_register_id {
+            let [divisor, reminder] = self
+                .registers
+                .get_disjoint_mut([div_register_id, rem_register_id])
+                .map_err(invalid_register_disjoint)?;
+
+            let divident = *reminder;
+            division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+
+            return Ok(3 + INSTRUCTION_SIZE);
+        }
+
+        if out_register_id == 0xF {
+            let [divisor, reminder] = self
+                .registers
+                .get_disjoint_mut([div_register_id, rem_register_id])
+                .map_err(invalid_register_disjoint)?;
+
+            let divident = data.get_word(self.instruction_pointer.offset(4));
+            division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+
+            return Ok(4 + INSTRUCTION_SIZE);
+        }
+
+        let [divisor, reminder, &mut divident] = self
+            .registers
+            .get_disjoint_mut([div_register_id, rem_register_id, out_register_id])
+            .map_err(invalid_register_disjoint)?;
+
+        division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+
+        Ok(3 + INSTRUCTION_SIZE)
     }
 
     fn handle_not(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
