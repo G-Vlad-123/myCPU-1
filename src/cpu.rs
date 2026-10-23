@@ -397,21 +397,34 @@ impl CPU {
             None => (),
         };
 
+        println!("in = {in_register_id}; out = {out_register_id};");
+
         if in_register_id == out_register_id {
-            let register = &mut self.registers[in_register_id];
-            biop(register, *register);
-            return Ok(2 + INSTRUCTION_SIZE);
+            return match self.registers.get_mut(in_register_id) {
+                Some(register) => {
+                    biop(register, *register);
+                    Ok(2 + INSTRUCTION_SIZE)
+                }
+                None => Err(CpuError::InvalidRegister {
+                    address: self.instruction_pointer.offset(1),
+                    instruction: self.instruction_pointer,
+                }),
+            };
         }
 
-        // Is there a better way to do this? Probably...
-        // But I don't caaaaaaaaare
-        if in_register_id != 0xF && out_register_id == 0xF {
-            let value = data.get_word(self.instruction_pointer.offset(3));
-            biop(&mut self.registers[in_register_id], value);
-            return Ok(3 + INSTRUCTION_SIZE);
+        if out_register_id == 0xF {
+            return match self.registers.get_mut(in_register_id) {
+                Some(register) => {
+                    let value = data.get_word(self.instruction_pointer.offset(3));
+                    biop(register, value);
+                    Ok(3 + INSTRUCTION_SIZE)
+                }
+                None => Err(CpuError::InvalidRegister {
+                    address: self.instruction_pointer.offset(1),
+                    instruction: self.instruction_pointer,
+                }),
+            };
         }
-
-        use std::slice::GetDisjointMutError as E;
 
         match self
             .registers
@@ -419,15 +432,12 @@ impl CPU {
         {
             Ok([in_register, &mut out_register]) => {
                 biop(in_register, out_register);
-                return Ok(2 + INSTRUCTION_SIZE);
+                Ok(2 + INSTRUCTION_SIZE)
             }
-            Err(E::IndexOutOfBounds) => Err(CpuError::InvalidRegister {
+            Err(_) => Err(CpuError::InvalidRegister {
                 address: self.instruction_pointer.offset(1),
                 instruction: self.instruction_pointer,
             }),
-            Err(E::OverlappingIndices) => {
-                unreachable!("`CPU::handle_biop`: Already checked for overlapping indecies")
-            }
         }
     }
 
@@ -589,42 +599,57 @@ mod testing {
     }
 
     #[test]
-    #[ignore = "Can't bother to test this yet <17 oct 2026>"]
     #[allow(unreachable_code)]
     fn signed_compare() -> Result<(), CpuError> {
-        todo!(
-            "Give better care to theese tests as they are just copy+paste atm (did change the cmp flags to smp tho)"
+        // NOTE: 8..=f are negative numbers, they represent the -8..=-1 (in the same order)
+        //       This also means that MAX = 7 and MIN = 8
+
+        //                                        r1 = 0;     r2 = f;    smp r2 r1
+        let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x32, 0x10])?;
+        assert!(final_state.flags.equal.is_zero(), "smp f 0 -> not equal");
+        assert!(
+            final_state.flags.greater.is_zero(),
+            "smp f 0 -> not greater"
         );
 
         //                                        r1 = 0;     r2 = f;    smp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x31, 0x20])?;
-        assert!(final_state.flags.equal.is_zero());
-        assert!(final_state.flags.greater.is_zero());
-
-        //                                        r1 = 0;     r2 = f;    smp r2 r1
-        let final_state = CPU::create_and_run(&[0x11, 0xf0, 0x12, 0xff, 0x32, 0x10])?;
-        assert!(final_state.flags.equal.is_zero());
-        assert!(final_state.flags.greater.is_one());
+        assert!(final_state.flags.equal.is_zero(), "smp 0 f -> not equal");
+        assert!(final_state.flags.greater.is_one(), "smp 0 f -> greater");
 
         //                                        r1 = 6;     r2 = 6;    smp r1 r2
         let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xf6, 0x31, 0x20])?;
-        assert!(final_state.flags.equal.is_one());
-        assert!(final_state.flags.greater.is_zero());
+        assert!(final_state.flags.equal.is_one(), "smp 6 6 -> equal");
+        assert!(
+            final_state.flags.greater.is_zero(),
+            "smp 6 6 -> not greater"
+        );
 
-        //                                        r1 = 6;    smp r1 7
-        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf7])?;
-        assert!(final_state.flags.equal.is_zero());
-        assert!(final_state.flags.greater.is_zero());
+        //                                        r1 = 7;    smp r1 8
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x31, 0xf8])?;
+        assert!(final_state.flags.equal.is_zero(), "smp 7 8 -> not equal");
+        assert!(final_state.flags.greater.is_one(), "smp 7 8 -> greater");
 
-        //                                        r1 = 6;    smp r1 6
-        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf6])?;
-        assert!(final_state.flags.equal.is_one());
-        assert!(final_state.flags.greater.is_zero());
+        //                                        r1 = 7;    smp r1 7
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x31, 0xf7])?;
+        assert!(final_state.flags.equal.is_one(), "smp 6 6 -> equal");
+        assert!(
+            final_state.flags.greater.is_zero(),
+            "smp 6 6 -> not greater"
+        );
 
-        //                                        r1 = 6;    smp r1 5
-        let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x31, 0xf5])?;
-        assert!(final_state.flags.equal.is_zero());
-        assert!(final_state.flags.greater.is_one());
+        //                                        r1 = 7;    smp r1 6
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x31, 0xf6])?;
+        assert!(final_state.flags.equal.is_zero(), "smp 6 5 -> not equal");
+        assert!(final_state.flags.greater.is_one(), "smp 6 5 -> greater");
+
+        //                                        r1 = 5;    smp r1 6
+        let final_state = CPU::create_and_run(&[0x11, 0xf5, 0x31, 0xf6])?;
+        assert!(final_state.flags.equal.is_zero(), "smp 5 6 -> not equal");
+        assert!(
+            final_state.flags.greater.is_zero(),
+            "smp 5 6 -> not greater"
+        );
 
         Ok(())
     }
@@ -648,8 +673,36 @@ mod testing {
     }
 
     #[test]
-    #[ignore = "implementing skip testing will take a while"]
+    #[allow(unused_labels)]
+    fn biop() -> Result<(), CpuError> {
+        let r1 = 6;
+        let r2 = 2;
+
+        'addition: {
+            //                                        r1 = 6;     r2 = 2;    r1 += r2;
+            let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xf2, 0x81, 0x20])?;
+            assert_eq!(final_state.registers[1].into_u8(), r1 + r2);
+
+            //                                        r1 = 6;    r1 += r1;
+            let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x81, 0x10])?;
+            assert_eq!(final_state.registers[1].into_u8(), r1 + r1);
+
+            //                                        r1 = 6;    r1 += 2;
+            let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x81, 0xf2])?;
+            assert_eq!(final_state.registers[1].into_u8(), r1 + 2);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn division() -> Result<(), CpuError> {
+        todo!("test cpu::testing::division")
+    }
+
+    #[test]
     fn skip() -> Result<(), CpuError> {
-        todo!("skip testing")
+        let _final_state = CPU::create_and_run(&[])?;
+        todo!("test cpu::testing::skip")
     }
 }

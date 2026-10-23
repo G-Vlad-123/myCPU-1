@@ -94,7 +94,7 @@ impl UInt {
     /// signed compare
     pub fn smp(mut self, mut rhs: UInt) -> std::cmp::Ordering {
         self.inner[0] = self.inner[0].not();
-        rhs.inner[1] = rhs.inner[1].not();
+        rhs.inner[0] = rhs.inner[0].not();
 
         self.cmp(rhs)
     }
