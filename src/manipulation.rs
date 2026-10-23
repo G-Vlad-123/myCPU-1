@@ -156,6 +156,8 @@ impl UInt {
     }
 
     #[must_use]
+    /// # PANIC
+    /// If `rhs` represents `0`
     pub fn div_rem(self, _rhs: UInt) -> (UInt, UInt, Overflow) {
         todo!("implement `UInt::div_rem`")
     }
