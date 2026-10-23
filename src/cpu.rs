@@ -228,7 +228,18 @@ impl CPU {
             I::Add => biop(),
             I::Sub => biop(),
             I::Mul => biop(),
-            I::Div => todo!("division (in `CPU::handle_skip`)"),
+            I::Div => {
+                let out_register_id = data
+                    .get_word(self.instruction_pointer.offset(INSTRUCTION_SIZE + 1 + 3))
+                    .into_u8() as usize;
+
+                let out_register = self.registers.get(out_register_id);
+
+                match out_register {
+                    Some(_) => 3,
+                    None => 4,
+                }
+            }
             I::Not => biop(),
             I::And => biop(),
             I::Or => biop(),
@@ -733,6 +744,7 @@ mod testing {
     }
 
     #[test]
+    #[allow(unused_labels)]
     fn skip() -> Result<(), CpuError> {
         let _final_state = CPU::create_and_run(&[])?;
         todo!("test cpu::testing::skip")
