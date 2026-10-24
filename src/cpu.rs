@@ -188,7 +188,7 @@ impl CPU {
     }
 
     fn handle_skip(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
-        let [zero_division, overflow, equal, greater] = data
+        let [greater, equal, overflow, zero_division] = data
             .get_word(self.instruction_pointer.offset(1))
             .into_bits();
 
@@ -306,19 +306,19 @@ impl CPU {
 
         self.flags.zero_divison = bit::Zero;
 
-        fn division(
-            div: &mut storage::Word,
-            rem: Option<&mut storage::Word>,
-            by: storage::Word,
-            overflow: &mut bit::Bit,
-        ) {
-            let result = div.into_uint().div_rem(by.into_uint());
-            *div = result.0.into_word();
-            if let Some(rem) = rem {
-                *rem = result.1.into_word();
+        let mut division =
+            |div: &mut storage::Word, rem: Option<&mut storage::Word>, by: storage::Word| {
+                if by == storage::Word::ZEROED {
+                    self.flags.zero_divison = bit::One;
+                    return;
+                }
+                let result = div.into_uint().div_rem(by.into_uint());
+                *div = result.0.into_word();
+                if let Some(rem) = rem {
+                    *rem = result.1.into_word();
+                };
+                self.flags.overflow = result.2.0;
             };
-            *overflow = result.2.0;
-        }
 
         let invalid_register = |offset| CpuError::InvalidRegister {
             address: self.instruction_pointer.offset(offset),
@@ -334,7 +334,7 @@ impl CPU {
                 .registers
                 .get_mut(div_register_id)
                 .ok_or(invalid_register(1))?;
-            division(divisor, None, *divisor, &mut self.flags.overflow);
+            division(divisor, None, *divisor);
             return Ok(3 + INSTRUCTION_SIZE);
         }
 
@@ -349,7 +349,7 @@ impl CPU {
                 .get_mut(div_register_id)
                 .ok_or(invalid_register(1))?;
 
-            division(divisor, None, dividant, &mut self.flags.overflow);
+            division(divisor, None, dividant);
 
             return Ok(arg_count + INSTRUCTION_SIZE);
         }
@@ -360,7 +360,7 @@ impl CPU {
                 .get_disjoint_mut([div_register_id, rem_register_id])
                 .map_err(invalid_register_disjoint)?;
 
-            division(divisor, Some(reminder), *divisor, &mut self.flags.overflow);
+            division(divisor, Some(reminder), *divisor);
 
             return Ok(3 + INSTRUCTION_SIZE);
         }
@@ -372,7 +372,7 @@ impl CPU {
                 .map_err(invalid_register_disjoint)?;
 
             let divident = *reminder;
-            division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+            division(divisor, Some(reminder), divident);
 
             return Ok(3 + INSTRUCTION_SIZE);
         }
@@ -384,7 +384,7 @@ impl CPU {
                 .map_err(invalid_register_disjoint)?;
 
             let divident = data.get_word(self.instruction_pointer.offset(4));
-            division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+            division(divisor, Some(reminder), divident);
 
             return Ok(4 + INSTRUCTION_SIZE);
         }
@@ -394,7 +394,7 @@ impl CPU {
             .get_disjoint_mut([div_register_id, rem_register_id, out_register_id])
             .map_err(invalid_register_disjoint)?;
 
-        division(divisor, Some(reminder), divident, &mut self.flags.overflow);
+        division(divisor, Some(reminder), divident);
 
         Ok(3 + INSTRUCTION_SIZE)
     }
@@ -824,7 +824,57 @@ mod testing {
     #[test]
     #[allow(unused_labels)]
     fn skip() -> Result<(), CpuError> {
-        let _final_state = CPU::create_and_run(&[])?;
-        todo!("test cpu::testing::skip")
+        'checking: {
+            #[rustfmt::skip] let skip_none          = (0x5 << 4) | 0b0000;
+            #[rustfmt::skip] let skip_greater       = (0x5 << 4) | 0b1000;
+            #[rustfmt::skip] let skip_equal         = (0x5 << 4) | 0b0100;
+            #[rustfmt::skip] let skip_overflow      = (0x5 << 4) | 0b0010;
+            #[rustfmt::skip] let skip_zero_division = (0x5 << 4) | 0b0001;
+
+            let final_state = CPU::create_and_run(&[skip_none, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 0);
+
+            let final_state =
+                CPU::create_and_run(&[0x11, 0xff, 0x21, 0xf6, skip_greater, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 6);
+
+            let final_state = CPU::create_and_run(&[skip_greater, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 0);
+
+            let final_state =
+                CPU::create_and_run(&[0x11, 0xff, 0x21, 0xff, skip_equal, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 6);
+
+            let final_state = CPU::create_and_run(&[skip_equal, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 0);
+
+            let final_state =
+                CPU::create_and_run(&[0x11, 0xff, 0x81, 0xf1, skip_overflow, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 6);
+
+            let final_state = CPU::create_and_run(&[skip_overflow, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 0);
+
+            let final_state = CPU::create_and_run(&[
+                0x12,
+                0xf0,
+                0xb1,
+                0x12,
+                skip_zero_division,
+                0x01,
+                0x2f,
+                0x60,
+            ])?;
+            assert_eq!(final_state.registers[2].into_u8(), 6);
+
+            let final_state = CPU::create_and_run(&[skip_zero_division, 0x01, 0x2f, 0x60])?;
+            assert_eq!(final_state.registers[2].into_u8(), 0);
+        }
+
+        'skipping: {
+            todo!("test `cpu::testing::skip` 'skipping")
+        }
+
+        Ok(())
     }
 }
