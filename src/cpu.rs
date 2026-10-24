@@ -440,8 +440,6 @@ impl CPU {
             None => (),
         };
 
-        println!("in = {in_register_id}; out = {out_register_id};");
-
         if in_register_id == out_register_id {
             return match self.registers.get_mut(in_register_id) {
                 Some(register) => {
@@ -725,14 +723,32 @@ mod testing {
             //                                        r1 = 6;     r2 = 2;    r1 += r2;
             let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x12, 0xf2, 0x81, 0x20])?;
             assert_eq!(final_state.registers[1].into_u8(), r1 + r2);
+            assert_eq!(final_state.flags.overflow, bit::Zero);
 
             //                                        r1 = 6;    r1 += r1;
             let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x81, 0x10])?;
             assert_eq!(final_state.registers[1].into_u8(), r1 + r1);
+            assert_eq!(final_state.flags.overflow, bit::Zero);
 
             //                                        r1 = 6;    r1 += 2;
             let final_state = CPU::create_and_run(&[0x11, 0xf6, 0x81, 0xf2])?;
             assert_eq!(final_state.registers[1].into_u8(), r1 + 2);
+            assert_eq!(final_state.flags.overflow, bit::Zero);
+
+            //                                        r1 = f;     r2 = 1;    r1 += r2;
+            let final_state = CPU::create_and_run(&[0x11, 0xff, 0x12, 0xf1, 0x81, 0x20])?;
+            assert_eq!(final_state.registers[1].into_u8(), 0);
+            assert_eq!(final_state.flags.overflow, bit::One);
+
+            //                                        r1 = f;    r1 += r1;
+            let final_state = CPU::create_and_run(&[0x11, 0xff, 0x81, 0x10])?;
+            assert_eq!(final_state.registers[1].into_u8(), 0xe);
+            assert_eq!(final_state.flags.overflow, bit::One);
+
+            //                                        r1 = f;    r1 += 1;
+            let final_state = CPU::create_and_run(&[0x11, 0xff, 0x81, 0xf1])?;
+            assert_eq!(final_state.registers[1].into_u8(), 0);
+            assert_eq!(final_state.flags.overflow, bit::One);
         }
 
         Ok(())
