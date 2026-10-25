@@ -10,6 +10,10 @@ pub fn write(
     target: impl std::io::Write,
     program: impl Iterator<Item = Instr>,
 ) -> Result<(), WritingError> {
+    write_data(target, collect_data(program))
+}
+
+fn collect_data(program: impl Iterator<Item = Instr>) -> Vec<Word> {
     let mut data: Vec<Word> = Vec::new();
 
     macro_rules! append_to_data {
@@ -54,5 +58,22 @@ pub fn write(
         }
     }
 
-    todo!("`writer::write` write to source")
+    data
+}
+
+fn write_data(_target: impl std::io::Write, _data: Vec<Word>) -> Result<(), WritingError> {
+    todo!("`writer::write_data`")
+}
+
+#[cfg(test)]
+mod testing {
+    #[test]
+    fn collect_data() {
+        todo!("test `writer::testing::collect_data`")
+    }
+
+    #[test]
+    fn write_data() {
+        todo!("test `writer::testing::write_data`")
+    }
 }
