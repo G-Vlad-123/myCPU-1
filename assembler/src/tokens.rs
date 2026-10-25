@@ -67,8 +67,9 @@ pub enum Instruction {
         value: values::Value,
     },
     Div {
-        register: values::Register,
-        value: values::Value,
+        divisor: values::Register,
+        remainder: values::Register,
+        divident: values::Value,
     },
     Not {
         register: values::Register,

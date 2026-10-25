@@ -1,3 +1,13 @@
+pub trait AppendTo {
+    fn append_to(self, data: &mut Vec<Word>);
+}
+
+impl<T: Into<Word>> AppendTo for T {
+    fn append_to(self, data: &mut Vec<Word>) {
+        data.push(self.into())
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Word {
@@ -19,24 +29,37 @@ pub enum Word {
     WF = 0xF,
 }
 
-#[repr(u8)]
+impl From<[bool; 4]> for Word {
+    fn from(array: [bool; 4]) -> Self {
+        let int: u8 = ((array[0] as u8) << 3)
+            | ((array[1] as u8) << 2)
+            | ((array[2] as u8) << 1)
+            | ((array[3] as u8) << 0);
+
+        unsafe {
+            // SAFETY: int will only be 4 bits long which covers all possible word values
+            std::mem::transmute(int)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Register {
-    R0 = 0x0,
-    R1 = 0x1,
-    R2 = 0x2,
-    R3 = 0x3,
-    R4 = 0x4,
-    R5 = 0x5,
-    R6 = 0x6,
-    R7 = 0x7,
-    R8 = 0x8,
-    R9 = 0x9,
-    RA = 0xA,
-    RB = 0xB,
-    RC = 0xC,
-    RD = 0xD,
-    RE = 0xE,
+    R0,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    R8,
+    R9,
+    RA,
+    RB,
+    RC,
+    RD,
+    RE,
 }
 
 impl Register {
@@ -125,17 +148,27 @@ impl From<Literal> for Value {
     }
 }
 
-impl From<Value> for Word {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::Register(register) => register.into(),
-            Value::Literal(literal) => literal.into(),
+impl AppendTo for Value {
+    fn append_to(self, data: &mut Vec<Word>) {
+        match self {
+            Self::Literal(literal) => {
+                data.push(Word::WF);
+                literal.append_to(data);
+            }
+            Self::Register(register) => register.append_to(data),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Address {
-    high: Word,
-    low: Word,
+    pub high: Word,
+    pub low: Word,
+}
+
+impl AppendTo for Address {
+    fn append_to(self, data: &mut Vec<Word>) {
+        self.high.append_to(data);
+        self.low.append_to(data);
+    }
 }
