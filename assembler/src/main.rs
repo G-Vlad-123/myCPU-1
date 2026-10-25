@@ -72,5 +72,5 @@ fn main() -> Result<(), TopError> {
 
     let mut file = std::fs::File::create(&path).context(CouldNotCreateFileSnafu { path })?;
 
-    writer::write(&mut file, program.iter()).map_err(Into::into)
+    writer::write(file, program.iter()).map_err(Into::into)
 }
