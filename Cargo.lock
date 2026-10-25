@@ -3,8 +3,12 @@
 version = 4
 
 [[package]]
+name = "assembler"
+version = "0.1.0"
+
+[[package]]
 name = "myCPU-1"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "tap",
 ]
