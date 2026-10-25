@@ -147,6 +147,7 @@ impl CPU {
         Ok(ret + INSTRUCTION_SIZE)
     }
 
+    #[cold]
     fn handle_signed_compare(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
         let lhs_register_id = data.get_word(self.instruction_pointer.offset(1)).into_u8() as usize;
         let rhs_register_id = data.get_word(self.instruction_pointer.offset(2)).into_u8() as usize;
@@ -188,6 +189,8 @@ impl CPU {
     }
 
     fn handle_skip(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
+        use std::hint::cold_path as cold;
+
         let [greater, equal, overflow, zero_division] = data
             .get_word(self.instruction_pointer.offset(1))
             .into_bits();
@@ -203,6 +206,8 @@ impl CPU {
         }
 
         let biop = || {
+            cold();
+
             let out_register_id = data
                 .get_word(self.instruction_pointer.offset(INSTRUCTION_SIZE + 1 + 2))
                 .into_u8() as usize;
@@ -215,20 +220,27 @@ impl CPU {
             }
         };
 
+        fn cold_const<T>(value: T) -> T {
+            cold();
+            value
+        }
+
         use Instruction as I;
         let input_count: u8 = match I::fetch(self.instruction_pointer.offset(2), data) {
             I::Halt => 0,
             I::Move => biop(),
-            I::Compare => 2,
-            I::SignedCompare => 2,
+            I::Compare => cold_const(2),
+            I::SignedCompare => cold_const(2),
             I::Jump => 2,
             I::Skip => 1,
-            I::Get => 3,
-            I::Set => 3,
+            I::Get => cold_const(3),
+            I::Set => cold_const(3),
             I::Add => biop(),
             I::Sub => biop(),
             I::Mul => biop(),
             I::Div => {
+                cold();
+
                 let out_register_id = data
                     .get_word(self.instruction_pointer.offset(INSTRUCTION_SIZE + 1 + 3))
                     .into_u8() as usize;
@@ -299,6 +311,7 @@ impl CPU {
         self.handle_biop(data, manip::modify_word(overflow_helper(manip::UInt::mul)))
     }
 
+    #[cold]
     fn handle_div(&mut self, data: &storage::Data) -> Result<u8, CpuError> {
         let div_register_id = data.get_word(self.instruction_pointer.offset(1)).into_u8() as usize;
         let rem_register_id = data.get_word(self.instruction_pointer.offset(2)).into_u8() as usize;
@@ -320,9 +333,12 @@ impl CPU {
                 self.flags.overflow = result.2.0;
             };
 
-        let invalid_register = |offset| CpuError::InvalidRegister {
-            address: self.instruction_pointer.offset(offset),
-            instruction: self.instruction_pointer,
+        let invalid_register = |offset| {
+            std::hint::cold_path();
+            CpuError::InvalidRegister {
+                address: self.instruction_pointer.offset(offset),
+                instruction: self.instruction_pointer,
+            }
         };
 
         let invalid_register_disjoint = move |_: std::slice::GetDisjointMutError| {
@@ -330,11 +346,15 @@ impl CPU {
         };
 
         if div_register_id == rem_register_id && div_register_id == out_register_id {
+            std::hint::cold_path();
+
             let divisor = self
                 .registers
                 .get_mut(div_register_id)
                 .ok_or(invalid_register(1))?;
-            division(divisor, None, *divisor);
+
+            *divisor = storage::Word::new([bit::Zero, bit::Zero, bit::Zero, bit::One]);
+
             return Ok(3 + INSTRUCTION_SIZE);
         }
 
@@ -355,17 +375,22 @@ impl CPU {
         }
 
         if div_register_id == out_register_id {
+            std::hint::cold_path();
+
             let [divisor, reminder] = self
                 .registers
                 .get_disjoint_mut([div_register_id, rem_register_id])
                 .map_err(invalid_register_disjoint)?;
 
-            division(divisor, Some(reminder), *divisor);
+            *divisor = storage::Word::new([bit::Zero, bit::Zero, bit::Zero, bit::One]);
+            *reminder = storage::Word::ZEROED;
 
             return Ok(3 + INSTRUCTION_SIZE);
         }
 
         if rem_register_id == out_register_id {
+            std::hint::cold_path();
+
             let [divisor, reminder] = self
                 .registers
                 .get_disjoint_mut([div_register_id, rem_register_id])
@@ -441,6 +466,8 @@ impl CPU {
         };
 
         if in_register_id == out_register_id {
+            std::hint::cold_path();
+
             return match self.registers.get_mut(in_register_id) {
                 Some(register) => {
                     biop(register, *register);
@@ -824,6 +851,8 @@ mod testing {
     #[test]
     #[allow(unused_labels)]
     fn skip() -> Result<(), CpuError> {
+        // this test assumes skipping `hlt` works perfectly (it does)
+
         'checking: {
             #[rustfmt::skip] let skip_none          = (0x5 << 4) | 0b0000;
             #[rustfmt::skip] let skip_greater       = (0x5 << 4) | 0b1000;
@@ -872,7 +901,40 @@ mod testing {
         }
 
         'skipping: {
-            todo!("test `cpu::testing::skip` 'skipping")
+            macro_rules! skip_instruction {
+                ( $($byte:literal),+ $(,)? ) => {
+                    CPU::create_and_run(&[0x11, 0xff, 0x21, 0xff, 0x5f, $($byte, )+])?
+                };
+            }
+
+            // Tested: `mov`, `cmp`, `jmp`, `skp`, `add` and `div`
+            // The rest can be (kinda) derived from the others
+
+            let final_state = skip_instruction![0x12, 0x10];
+            assert_ne!(final_state.registers[2], final_state.registers[1]);
+
+            let final_state = skip_instruction![0x12, 0xf6];
+            assert_ne!(final_state.registers[2].into_u8(), 6);
+
+            let final_state = skip_instruction![0x20, 0x10];
+            assert!(final_state.flags.equal.is_one());
+
+            let final_state = skip_instruction![0x20, 0xff];
+            assert!(final_state.flags.equal.is_one());
+
+            // checks if the program finishes
+            let _ = skip_instruction![0x40, 0x00];
+
+            // checks if the program finishes
+            let _ = skip_instruction![0x5f, 0x04, 0x00];
+
+            let final_state = skip_instruction![0x82, 0x10];
+            assert_ne!(final_state.registers[2], final_state.registers[1]);
+
+            let final_state = skip_instruction![0x82, 0xf6];
+            assert_ne!(final_state.registers[2].into_u8(), 6);
+
+            todo!("UInt::div_rem")
         }
 
         Ok(())
