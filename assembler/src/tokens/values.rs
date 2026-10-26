@@ -172,3 +172,70 @@ impl AppendTo for Address {
         self.low.append_to(data);
     }
 }
+
+#[cfg(test)]
+pub(crate) mod test_prelude {
+    use crate::tokens::values::Address;
+
+    pub use super::{Literal, Register, Value, Word};
+
+    pub fn all_words() -> impl Iterator<Item = Word> {
+        [
+            Word::W0,
+            Word::W1,
+            Word::W2,
+            Word::W3,
+            Word::W4,
+            Word::W5,
+            Word::W6,
+            Word::W7,
+            Word::W8,
+            Word::W9,
+            Word::WA,
+            Word::WB,
+            Word::WC,
+            Word::WD,
+            Word::WE,
+            Word::WF,
+        ]
+        .into_iter()
+    }
+
+    pub fn all_registers() -> impl Iterator<Item = Register> {
+        [
+            Register::R0,
+            Register::R1,
+            Register::R2,
+            Register::R3,
+            Register::R4,
+            Register::R5,
+            Register::R6,
+            Register::R7,
+            Register::R8,
+            Register::R9,
+            Register::RA,
+            Register::RB,
+            Register::RC,
+            Register::RD,
+            Register::RE,
+        ]
+        .into_iter()
+    }
+
+    pub fn all_literals() -> impl Iterator<Item = Literal> {
+        all_words().map(Literal)
+    }
+
+    pub fn _all_values() -> impl Iterator<Item = Value> {
+        std::iter::chain(
+            all_registers().map(Value::Register),
+            all_literals().map(Value::Literal),
+        )
+    }
+
+    pub fn all_addresses() -> impl Iterator<Item = Address> {
+        all_words()
+            .map(|low| all_words().map(move |high| Address { high, low }))
+            .flatten()
+    }
+}
