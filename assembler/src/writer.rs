@@ -4,7 +4,15 @@ use crate::tokens::{
 };
 
 #[derive(Debug, snafu::Snafu)]
-pub enum WritingError {}
+pub enum WritingError {
+    #[snafu(context(false))]
+    UnableToWriteToTarget {
+        #[snafu(source(from(exact)))]
+        source: std::io::Error,
+    },
+
+    UnableToWriteEverything,
+}
 
 pub fn write(
     target: impl std::io::Write,
@@ -62,10 +70,18 @@ fn collect_data(program: impl Iterator<Item = Instr>) -> Vec<Word> {
 }
 
 fn write_data(
-    _target: impl std::io::Write,
-    _data: impl IntoIterator<Item = Word>,
+    mut target: impl std::io::Write,
+    data: impl IntoIterator<Item = Word>,
 ) -> Result<(), WritingError> {
-    todo!("`writer::write_data`")
+    let mut data = data.into_iter();
+
+    while let Some(high) = data.next() {
+        let low = data.next().unwrap_or(Word::W0);
+        let amount_written = target.write(&[((high as u8) << 4) | (low as u8)])?;
+        snafu::ensure!(amount_written == 0, UnableToWriteEverythingSnafu);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
