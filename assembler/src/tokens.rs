@@ -17,6 +17,14 @@ impl Program {
     }
 }
 
+impl<Instr: Into<Instruction>> FromIterator<Instr> for Program {
+    fn from_iter<I: IntoIterator<Item = Instr>>(iter: I) -> Self {
+        Program {
+            instructions: iter.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
     Halt,
