@@ -78,7 +78,7 @@ fn write_data(
     while let Some(high) = data.next() {
         let low = data.next().unwrap_or(Word::W0);
         let amount_written = target.write(&[((high as u8) << 4) | (low as u8)])?;
-        snafu::ensure!(amount_written == 0, UnableToWriteEverythingSnafu);
+        snafu::ensure!(amount_written == 1, UnableToWriteEverythingSnafu);
     }
 
     Ok(())
@@ -286,36 +286,114 @@ mod testing {
     }
 
     mod write_data {
+        use snafu::ResultExt;
+
         use crate::tokens::values::test_prelude::*;
         use crate::writer::{WritingError, write_data};
 
-        fn _one_write<const N: usize>(
+        #[derive(Default, Debug, snafu::Snafu)]
+        struct ErrorDump {
+            pub errors: Vec<ErrorFragment>,
+        }
+
+        impl ErrorDump {
+            fn add(&mut self, result: Result<(), ErrorFragment>) {
+                if let Err(err) = result {
+                    self.errors.push(err)
+                }
+            }
+
+            fn dump(self) -> Result<(), Self> {
+                self.errors.is_empty().then_some(()).ok_or(self)
+            }
+        }
+
+        #[derive(Debug, snafu::Snafu)]
+        struct ErrorFragment {
+            #[snafu(source)]
+            source: WritingError,
+
+            seed: [u8; 32],
+            data: Vec<Word>,
+            expected: Vec<u8>,
+        }
+
+        fn one_write(
             data: impl IntoIterator<Item = Word>,
-            expected: [u8; N],
+            expected: &[u8],
         ) -> Result<(), WritingError> {
-            let mut target = Vec::new();
+            let mut target = Vec::with_capacity(expected.len());
             write_data(&mut target, data)?;
             assert_eq!(target, expected);
             Ok(())
         }
 
-        fn for_specific_size(_data_size: std::ops::Range<usize>) {
-            todo!("{}::template", module_path!())
+        fn for_specific_size(
+            repeats: usize,
+            data_size: std::ops::Range<usize>,
+        ) -> Result<(), ErrorDump> {
+            use rand::prelude::*;
+
+            let uniform = rand::distr::Uniform::new(data_size.start, data_size.end)
+                .expect("Invalid data_size");
+            let mut data: Vec<Word> = Vec::with_capacity(data_size.end * 2);
+            let mut expected: Vec<u8> = Vec::with_capacity(data_size.end);
+
+            let mut single_iteration = || -> Result<(), ErrorFragment> {
+                data.clear();
+                expected.clear();
+
+                let seed = rand::random();
+                let mut rng = StdRng::from_seed(seed);
+
+                let size = rng.sample(uniform) + 1;
+                expected.resize_with(size, || rng.random());
+
+                for &byte in &expected[..size] {
+                    data.extend(crate::tokens::values::byte_to_pair(byte))
+                }
+
+                one_write(data.iter().copied(), &expected[..size]).with_context(|_| {
+                    ErrorFragmentSnafu {
+                        seed,
+                        data: data.clone(),
+                        expected: expected.clone(),
+                    }
+                })
+            };
+
+            let mut error_dump = ErrorDump::default();
+
+            for _ in 0..repeats {
+                error_dump.add(single_iteration())
+            }
+
+            error_dump.dump()
         }
 
         #[test]
-        fn small_data() {
-            for_specific_size(0..16)
+        fn tiny_data() -> Result<(), ErrorDump> {
+            for_specific_size(1, 0..1)?;
+            for_specific_size(1, 1..2)?;
+            for_specific_size(1, 2..3)?;
+            for_specific_size(1, 3..4)?;
+            for_specific_size(1, 4..5)?;
+            Ok(())
         }
 
         #[test]
-        fn medium_data() {
-            for_specific_size(16..64)
+        fn small_data() -> Result<(), ErrorDump> {
+            for_specific_size(200, 0..16)
         }
 
         #[test]
-        fn large_data() {
-            for_specific_size(64..256)
+        fn medium_data() -> Result<(), ErrorDump> {
+            for_specific_size(40_000, 16..64)
+        }
+
+        #[test]
+        fn large_data() -> Result<(), ErrorDump> {
+            for_specific_size(u16::MAX as usize, 64..256)
         }
     }
 }

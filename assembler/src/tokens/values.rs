@@ -29,6 +29,13 @@ pub enum Word {
     WF = 0xF,
 }
 
+#[cfg(test)]
+pub fn byte_to_pair(byte: u8) -> [Word; 2] {
+    let first = byte.unbounded_shr(4);
+    let second = byte & 0b1111;
+    unsafe { [std::mem::transmute(first), std::mem::transmute(second)] }
+}
+
 impl From<[bool; 4]> for Word {
     fn from(array: [bool; 4]) -> Self {
         let int: u8 = ((array[0] as u8) << 3)
