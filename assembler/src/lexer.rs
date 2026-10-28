@@ -302,3 +302,137 @@ impl FromStr for values::Value {
         })
     }
 }
+
+#[cfg(test)]
+mod testing {
+    mod into_lines {}
+
+    mod parsing {
+        use snafu::ResultExt;
+
+        use crate::tokens::{Instruction as Instr, values::test_prelude::*};
+
+        #[derive(Debug, snafu::Snafu)]
+        struct ErrorDump<T: std::str::FromStr<Err: 'static + std::error::Error>> {
+            pub errors: Vec<ErrorFragment<T>>,
+        }
+
+        impl<T: std::str::FromStr<Err: 'static + std::error::Error>> ErrorDump<T> {
+            fn new() -> Self {
+                Self { errors: Vec::new() }
+            }
+
+            fn add(&mut self, result: Result<(), ErrorFragment<T>>) {
+                if let Err(err) = result {
+                    self.errors.push(err)
+                }
+            }
+
+            fn dump(self) -> Result<(), Self> {
+                self.errors.is_empty().then_some(()).ok_or(self)
+            }
+        }
+
+        #[derive(snafu::Snafu)]
+        struct ErrorFragment<T: std::str::FromStr<Err: 'static + std::error::Error>> {
+            #[snafu(source)]
+            source: T::Err,
+
+            string: String,
+            expected: T,
+        }
+
+        impl<T: std::fmt::Debug + std::str::FromStr<Err: 'static + std::error::Error>>
+            std::fmt::Debug for ErrorFragment<T>
+        {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_struct("ErrorFragment")
+                    .field("source", &self.source)
+                    .field("string", &self.string)
+                    .field("expected", &self.expected)
+                    .finish()
+            }
+        }
+
+        fn template<
+            S: AsRef<str>,
+            T: Copy
+                + PartialEq
+                + std::fmt::Debug
+                + std::str::FromStr<Err: 'static + std::error::Error>,
+        >(
+            checks: impl IntoIterator<Item = (S, T)>,
+        ) -> Result<(), ErrorDump<T>> {
+            fn iteration<
+                T: Copy
+                    + PartialEq
+                    + std::fmt::Debug
+                    + std::str::FromStr<Err: 'static + std::error::Error>,
+            >(
+                string: impl AsRef<str>,
+                expected: T,
+            ) -> Result<(), ErrorFragment<T>> {
+                let gotten_val =
+                    string
+                        .as_ref()
+                        .parse::<T>()
+                        .with_context(|_| ErrorFragmentSnafu {
+                            string: string.as_ref().to_string(),
+                            expected,
+                        })?;
+                assert_eq!(gotten_val, expected);
+                Ok(())
+            }
+
+            let mut error_dump = ErrorDump::new();
+
+            for (string, expected) in checks {
+                error_dump.add(iteration(string, expected))
+            }
+
+            error_dump.dump()
+        }
+
+        #[test]
+        fn word() {
+            use Word::*;
+
+            #[rustfmt::skip]
+            template([
+                ("0", W0),
+                ("1", W1),
+                ("2", W2),
+                ("3", W3),
+                ("4", W4),
+                ("5", W5),
+                ("6", W6),
+                ("7", W7),
+                ("8", W8),
+                ("9", W9),
+                ("A", WA), ("a", WA), ("10", WA),
+                ("B", WB), ("b", WB), ("11", WB),
+                ("C", WC), ("c", WC), ("12", WC),
+                ("D", WD), ("d", WD), ("13", WD),
+                ("E", WE), ("e", WE), ("14", WE),
+                ("F", WF), ("f", WF), ("15", WF),
+            ])
+            .map_err(|err| format!("{err:#?}"))
+            .unwrap();
+        }
+
+        #[test]
+        fn register() {
+            todo!("test `{}::register`", module_path!())
+        }
+
+        #[test]
+        fn literal() {
+            todo!("test `{}::literal`", module_path!())
+        }
+
+        #[test]
+        fn instruction() {
+            todo!("test `{}::word`", module_path!())
+        }
+    }
+}
