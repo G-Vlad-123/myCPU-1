@@ -4,14 +4,6 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new() -> Program {
-        Self::default()
-    }
-
-    pub fn push(&mut self, instruction: Instruction) {
-        self.instructions.push(instruction)
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = Instruction> {
         self.instructions.iter().copied()
     }
@@ -98,6 +90,7 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    #[cfg(test)]
     pub fn id(self) -> InstructionId {
         match self {
             Instruction::Halt => InstructionId::Halt,

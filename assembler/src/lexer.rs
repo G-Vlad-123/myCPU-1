@@ -437,6 +437,7 @@ mod testing {
 
         #[test]
         fn instruction() {
+            let _remove_warning_super_variable: Instr;
             todo!("test `{}::word`", module_path!())
         }
     }
