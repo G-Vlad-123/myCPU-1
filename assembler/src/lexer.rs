@@ -685,7 +685,7 @@ mod testing {
                 .map(|(str, address)| (format!("jmp {str}"), Instr::Jump { address }));
 
             // FIXME
-            let skip = iter::once(("skp zero_div", Instr::Halt));
+            let skip = iter::once(("skp zero_div".to_string(), Instr::Halt));
 
             let get = all_registers()
                 .map(|register| all_addresses().map(move |address| (register, address)))
