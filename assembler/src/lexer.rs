@@ -59,12 +59,12 @@ pub enum ParseInstructionError {
     #[snafu(context(false))]
     DoubleSkipArgument {
         #[snafu(source(from(exact)))]
-        source: ParseSkipError,
+        source: ParseInstructionSkipError,
     },
 }
 
 #[derive(Debug, snafu::Snafu)]
-pub enum ParseSkipError {
+pub enum ParseInstructionSkipError {
     DoubleGreater,
     DoubleEqual,
     DoubleOverflow,
@@ -130,7 +130,7 @@ mod parsing {
 
             fn parse_skip<'iter, 'str>(
                 iter: &'iter mut impl Iterator<Item = &'str str>,
-            ) -> Result<Instruction, ParseSkipError> {
+            ) -> Result<Instruction, ParseInstructionSkipError> {
                 let mut due_to_greater = false;
                 let mut due_to_equal = false;
                 let mut due_to_overflow = false;
