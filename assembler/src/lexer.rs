@@ -446,7 +446,6 @@ mod testing {
     }
 
     mod parsing {
-        use rand::seq::SliceRandom;
         use snafu::ResultExt;
 
         use crate::tokens::{
