@@ -29,7 +29,7 @@ pub enum EncodeError {
     },
 }
 
-#[derive(Debug, snafu::Snafu)]
+#[derive(Debug, PartialEq, snafu::Snafu)]
 pub enum ParseInstructionError {
     Empty,
 
@@ -72,7 +72,7 @@ pub enum ParseInstructionError {
     },
 }
 
-#[derive(Debug, snafu::Snafu)]
+#[derive(Debug, PartialEq, snafu::Snafu)]
 pub enum ParseInstructionSkipError {
     DoubleGreater,
     DoubleEqual,
@@ -303,7 +303,7 @@ mod parsing {
         }
     }
 
-    #[derive(Debug, snafu::Snafu)]
+    #[derive(Debug, PartialEq, snafu::Snafu)]
     pub struct ParseWordError {
         string: String,
     }
@@ -336,7 +336,7 @@ mod parsing {
         }
     }
 
-    #[derive(Debug, snafu::Snafu)]
+    #[derive(Debug, PartialEq, snafu::Snafu)]
     pub struct ParseRegisterError {
         string: String,
     }
@@ -368,7 +368,7 @@ mod parsing {
         }
     }
 
-    #[derive(Debug, snafu::Snafu)]
+    #[derive(Debug, PartialEq, snafu::Snafu)]
     #[snafu(context(false))]
     pub struct ParseLiteralError {
         #[snafu(source(from(exact)))]
@@ -384,7 +384,7 @@ mod parsing {
         }
     }
 
-    #[derive(Debug, snafu::Snafu)]
+    #[derive(Debug, PartialEq, snafu::Snafu)]
     pub struct ParseValueError {
         register_err: ParseRegisterError,
         literal_err: ParseLiteralError,
@@ -446,9 +446,13 @@ mod testing {
     }
 
     mod parsing {
+        use rand::seq::SliceRandom;
         use snafu::ResultExt;
 
-        use crate::tokens::{Instruction as Instr, values::test_prelude::*};
+        use crate::tokens::{
+            Instruction as Instr,
+            values::{Address, test_prelude::*},
+        };
 
         #[derive(Debug, snafu::Snafu)]
         struct ErrorDump<T: std::str::FromStr<Err: 'static + std::error::Error>> {
@@ -531,12 +535,11 @@ mod testing {
             error_dump.dump()
         }
 
-        #[test]
-        fn word() {
+        #[rustfmt::skip]
+        fn all_words() -> impl Iterator<Item = (&'static str, Word)> {
             use Word::*;
 
-            #[rustfmt::skip]
-            template([
+            [
                 ("0", W0),
                 ("1", W1),
                 ("2", W2),
@@ -553,25 +556,231 @@ mod testing {
                 ("D", WD), ("d", WD), ("13", WD),
                 ("E", WE), ("e", WE), ("14", WE),
                 ("F", WF), ("f", WF), ("15", WF),
-            ])
+            ]
+            .into_iter()
+        }
+
+        #[rustfmt::skip]
+        fn all_registers() -> impl Iterator<Item = (&'static str, Register)> {
+            use Register::*;
+
+            [
+                ("R0", R0),
+                ("R1", R1),
+                ("R2", R2),
+                ("R3", R3),
+                ("R4", R4),
+                ("R5", R5),
+                ("R6", R6),
+                ("R7", R7),
+                ("R8", R8),
+                ("R9", R9),
+                ("RA", RA), ("Ra", RA), ("R10", RA),
+                ("RB", RB), ("Rb", RB), ("R11", RB),
+                ("RC", RC), ("Rc", RC), ("R12", RC),
+                ("RD", RD), ("Rd", RD), ("R13", RD),
+                ("RE", RE), ("Re", RE), ("R14", RE),
+
+                ("r0", R0),
+                ("r1", R1),
+                ("r2", R2),
+                ("r3", R3),
+                ("r4", R4),
+                ("r5", R5),
+                ("r6", R6),
+                ("r7", R7),
+                ("r8", R8),
+                ("r9", R9),
+                ("rA", RA), ("ra", RA), ("r10", RA),
+                ("rB", RB), ("rb", RB), ("r11", RB),
+                ("rC", RC), ("rc", RC), ("r12", RC),
+                ("rD", RD), ("rd", RD), ("r13", RD),
+                ("rE", RE), ("re", RE), ("r14", RE),
+            ]
+            .into_iter()
+        }
+
+        fn all_literals() -> impl Iterator<Item = (&'static str, Literal)> {
+            all_words().map(|(str, word)| (str, Literal(word)))
+        }
+
+        fn all_values() -> impl Iterator<Item = (&'static str, Value)> {
+            all_literals()
+                .map(|(str, literal)| (str, Value::Literal(literal)))
+                .chain(all_registers().map(|(str, register)| (str, Value::Register(register))))
+        }
+
+        fn all_addresses() -> impl Iterator<Item = (String, Address)> {
+            all_words()
+                .map(|low| all_words().map(move |high| (high, low)))
+                .flatten()
+                .map(|(high, low)| {
+                    (
+                        format!("{} {}", high.0, low.0),
+                        Address {
+                            high: high.1,
+                            low: low.1,
+                        },
+                    )
+                })
+        }
+
+        #[test]
+        fn word() {
+            template(all_words())
+                .map_err(|err| format!("{err:#?}"))
+                .unwrap();
+        }
+
+        #[test]
+        fn register() {
+            template(all_registers())
+                .map_err(|err| format!("{err:#?}"))
+                .unwrap();
+        }
+
+        #[test]
+        fn literal() {
+            template(all_literals())
+                .map_err(|err| format!("{err:#?}"))
+                .unwrap();
+        }
+
+        #[test]
+        fn value() {
+            template(all_values())
+                .map_err(|err| format!("{err:#?}"))
+                .unwrap();
+        }
+
+        #[test]
+        fn instruction_ok() {
+            use std::iter;
+
+            let halt = iter::once(("hlt".to_string(), Instr::Halt));
+
+            fn biop(
+                str_instr: &str,
+                instr: impl Fn(Register, Value) -> Instr,
+            ) -> impl Iterator<Item = (String, Instr)> {
+                all_registers()
+                    .map(|register| all_values().map(move |value| (register, value)))
+                    .flatten()
+                    .map(move |((str_reg, register), (str_val, value))| {
+                        (
+                            format!("{str_instr} {str_reg} {str_val}"),
+                            instr(register, value),
+                        )
+                    })
+            }
+
+            let r#move = biop("mov", |register, value| Instr::Move { register, value });
+            let compare = biop("cmp", |register, value| Instr::Compare { register, value });
+            let signed_compare = biop("smp", |register, value| Instr::SignedCompare {
+                register,
+                value,
+            });
+
+            let jump = all_addresses()
+                .map(|(str, address)| (format!("jmp {str}"), Instr::Jump { address }));
+
+            // FIXME
+            let skip = iter::once(("skp zero_div", Instr::Halt));
+
+            let get = all_registers()
+                .map(|register| all_addresses().map(move |address| (register, address)))
+                .flatten()
+                .map(|((str_reg, register), (str_addr, address))| {
+                    (
+                        format!("get {str_reg} {str_addr}"),
+                        Instr::Get { register, address },
+                    )
+                });
+
+            let set = all_registers()
+                .map(|register| all_addresses().map(move |address| (register, address)))
+                .flatten()
+                .map(|((str_reg, register), (str_addr, address))| {
+                    (
+                        format!("set {str_reg} {str_addr}"),
+                        Instr::Set { register, address },
+                    )
+                });
+
+            let add = biop("add", |register, value| Instr::Add { register, value });
+            let sub = biop("sub", |register, value| Instr::Sub { register, value });
+            let mul = biop("mul", |register, value| Instr::Mul { register, value });
+            let not = biop("not", |register, value| Instr::Not { register, value });
+            let and = biop("and", |register, value| Instr::And { register, value });
+            let or = biop("or", |register, value| Instr::Or { register, value });
+            let xor = biop("xor", |register, value| Instr::Xor { register, value });
+
+            let div = all_registers()
+                .map(|divisor| all_registers().map(move |reminder| (divisor, reminder)))
+                .flatten()
+                .map(|(divisor, reminder)| {
+                    all_values().map(move |divident| (divisor, reminder, divident))
+                })
+                .flatten()
+                .map(move |(divisor, reminder, divident)| {
+                    (
+                        format!("div {} {} {}", divisor.0, reminder.0, divident.0),
+                        Instr::Div {
+                            divisor: divisor.1,
+                            remainder: reminder.1,
+                            divident: divident.1,
+                        },
+                    )
+                });
+
+            template(
+                halt.chain(r#move)
+                    .chain(compare)
+                    .chain(signed_compare)
+                    .chain(jump)
+                    .chain(skip)
+                    .chain(get)
+                    .chain(set)
+                    .chain(add)
+                    .chain(sub)
+                    .chain(mul)
+                    .chain(div)
+                    .chain(not)
+                    .chain(and)
+                    .chain(or)
+                    .chain(xor),
+            )
             .map_err(|err| format!("{err:#?}"))
             .unwrap();
         }
 
         #[test]
-        fn register() {
-            todo!("test `{}::register`", module_path!())
-        }
+        fn instruction_err() {
+            use crate::lexer::ParseInstructionError::*;
 
-        #[test]
-        fn literal() {
-            todo!("test `{}::literal`", module_path!())
-        }
+            let instr = "".parse::<Instr>();
+            assert_eq!(instr, Err(Empty));
 
-        #[test]
-        fn instruction() {
-            let _remove_warning_super_variable: Instr;
-            todo!("test `{}::word`", module_path!())
+            for malformed_keyword in ["halt", "move", "hi", "no", "102", "❤️", "HLT", "Hlt"] {
+                let instr = malformed_keyword.parse::<Instr>();
+                assert_eq!(
+                    instr,
+                    Err(MalformedKeyword {
+                        string: malformed_keyword.to_string()
+                    })
+                );
+            }
+
+            let instr = "mov".parse::<Instr>();
+            assert_eq!(instr, Err(EarlyEOF));
+
+            let instr = "mov r1 r2 r3 r4 r5".parse::<Instr>();
+            assert_eq!(
+                instr,
+                Err(TooManyArguments {
+                    arguments: vec![String::from("r3"), String::from("r4"), String::from("r5")]
+                })
+            );
         }
     }
 }
