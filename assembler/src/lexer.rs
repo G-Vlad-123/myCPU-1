@@ -1,6 +1,5 @@
 use crate::tokens::{self, Instruction};
 use snafu::ResultExt;
-use tap::TapOptional;
 
 #[derive(Debug, snafu::Snafu)]
 pub enum LexerError {
