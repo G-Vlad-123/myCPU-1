@@ -1,4 +1,5 @@
 use crate::tokens::{self, Instruction};
+use snafu::ResultExt;
 
 #[derive(Debug, snafu::Snafu)]
 pub enum LexerError {
@@ -17,7 +18,15 @@ pub enum LexerError {
 
 #[derive(Debug, snafu::Snafu)]
 pub enum EncodeError {
-    IsNotUTF8,
+    IsNotUTF8 {
+        #[snafu(source)]
+        source: std::string::FromUtf8Error,
+    },
+
+    UnableToContinueRead {
+        #[snafu(source)]
+        source: std::io::Error,
+    },
 }
 
 #[derive(Debug, snafu::Snafu)]
@@ -83,10 +92,26 @@ pub fn tokenize_file(source: impl std::io::Read) -> Result<tokens::Program, Lexe
         .collect()
 }
 
-fn into_lines(_source: impl std::io::Read) -> impl Iterator<Item = Result<String, EncodeError>> {
-    todo!("`lexer::into_lines`");
-    #[allow(unreachable_code)]
-    [].into_iter()
+fn into_lines(source: impl std::io::Read) -> impl Iterator<Item = Result<String, EncodeError>> {
+    let mut current_line = Vec::new();
+    let mut source = source.bytes();
+
+    std::iter::from_fn(move || {
+        loop {
+            let byte = match source.next()?.context(UnableToContinueReadSnafu) {
+                Ok(byte) => byte,
+                Err(err) => return Some(Err(err)),
+            };
+
+            if byte == b'\n' {
+                return Some(
+                    String::from_utf8(std::mem::take(&mut current_line)).context(IsNotUTF8Snafu),
+                );
+            }
+
+            current_line.push(byte);
+        }
+    })
 }
 
 mod parsing {
