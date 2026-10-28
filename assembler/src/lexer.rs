@@ -1,5 +1,6 @@
 use crate::tokens::{self, Instruction};
 use snafu::ResultExt;
+use tap::TapOptional;
 
 #[derive(Debug, snafu::Snafu)]
 pub enum LexerError {
@@ -98,7 +99,17 @@ fn into_lines(source: impl std::io::Read) -> impl Iterator<Item = Result<String,
 
     std::iter::from_fn(move || {
         loop {
-            let byte = match source.next()?.context(UnableToContinueReadSnafu) {
+            let Some(next) = source.next() else {
+                if current_line.is_empty() {
+                    return None;
+                }
+
+                return Some(
+                    String::from_utf8(std::mem::take(&mut current_line)).context(IsNotUTF8Snafu),
+                );
+            };
+
+            let byte = match next.context(UnableToContinueReadSnafu) {
                 Ok(byte) => byte,
                 Err(err) => return Some(Err(err)),
             };
@@ -403,7 +414,37 @@ mod parsing {
 
 #[cfg(test)]
 mod testing {
-    mod into_lines {}
+    mod into_lines {
+        use crate::lexer::{EncodeError, into_lines};
+
+        #[test]
+        fn raw_text() -> Result<(), Vec<EncodeError>> {
+            let mut strings = Vec::new();
+            let mut errors = Vec::new();
+            for result in into_lines(b"Hello my name is G. Vlad ... \n \t And I like to code!\n\nI also HATE hating because hating makes u hate everything and urself, and I hate hating myself because it makes me sad :'(".as_slice()) {
+                match result {
+                    Ok(string) => strings.push(string),
+                    Err(error) => errors.push(error),
+                }
+            }
+
+            assert_eq!(
+                strings,
+                [
+                    "Hello my name is G. Vlad ... ",
+                    " \t And I like to code!",
+                    "",
+                    "I also HATE hating because hating makes u hate everything and urself, and I hate hating myself because it makes me sad :'("
+                ]
+            );
+
+            if errors.is_empty() {
+                Ok(())
+            } else {
+                Err(errors)
+            }
+        }
+    }
 
     mod parsing {
         use snafu::ResultExt;
