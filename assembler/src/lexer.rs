@@ -51,6 +51,25 @@ pub enum ParseInstructionError {
         #[snafu(source)]
         source: parsing::ParseWordError,
     },
+
+    TooManyArguments {
+        arguments: Vec<String>,
+    },
+
+    #[snafu(context(false))]
+    DoubleSkipArgument {
+        #[snafu(source(from(exact)))]
+        source: ParseSkipError,
+    },
+}
+
+#[derive(Debug, snafu::Snafu)]
+pub enum ParseSkipError {
+    DoubleGreater,
+    DoubleEqual,
+    DoubleOverflow,
+    DoubleZeroDivision,
+    UnknownArgument { argument: String },
 }
 
 pub fn tokenize_file(source: impl std::io::Read) -> Result<tokens::Program, LexerError> {
@@ -109,6 +128,49 @@ mod parsing {
                 })
             }
 
+            fn parse_skip<'iter, 'str>(
+                iter: &'iter mut impl Iterator<Item = &'str str>,
+            ) -> Result<Instruction, ParseSkipError> {
+                let mut due_to_greater = false;
+                let mut due_to_equal = false;
+                let mut due_to_overflow = false;
+                let mut due_to_zero_division = false;
+
+                for arg in iter {
+                    match arg {
+                        "greater" => {
+                            ensure!(!due_to_greater, DoubleGreaterSnafu);
+                            due_to_greater = true;
+                        }
+                        "equal" => {
+                            ensure!(!due_to_equal, DoubleEqualSnafu);
+                            due_to_equal = true;
+                        }
+                        "overflow" => {
+                            ensure!(!due_to_overflow, DoubleOverflowSnafu);
+                            due_to_overflow = true;
+                        }
+                        "zero_division" => {
+                            ensure!(!due_to_zero_division, DoubleZeroDivisionSnafu);
+                            due_to_zero_division = true;
+                        }
+                        _ => ensure!(
+                            false,
+                            UnknownArgumentSnafu {
+                                argument: arg.to_string()
+                            }
+                        ),
+                    }
+                }
+
+                Ok(Instruction::Skip {
+                    due_to_greater,
+                    due_to_equal,
+                    due_to_overflow,
+                    due_to_zero_division,
+                })
+            }
+
             let id = match keyword {
                 "hlt" => IId::Halt,
                 "mov" => IId::Move,
@@ -150,7 +212,7 @@ mod parsing {
                 IId::Jump => Instruction::Jump {
                     address: address(&mut instruction)?,
                 },
-                IId::Skip => todo!("impl `FromStr::from_str match IId::Skip` for `Instruction`"),
+                IId::Skip => parse_skip(&mut instruction)?,
                 IId::Get => Instruction::Get {
                     register: next(&mut instruction)?,
                     address: address(&mut instruction)?,
@@ -194,7 +256,13 @@ mod parsing {
                 },
             };
 
-            // ensure!(instruction.is_empty(), ...);
+            let remaining_arguments: Vec<String> = instruction.map(str::to_string).collect();
+            ensure!(
+                remaining_arguments.is_empty(),
+                TooManyArgumentsSnafu {
+                    arguments: remaining_arguments
+                }
+            );
 
             Ok(ret)
         }
