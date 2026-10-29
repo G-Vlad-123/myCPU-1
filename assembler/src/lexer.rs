@@ -683,8 +683,39 @@ mod testing {
             let jump = all_addresses()
                 .map(|(str, address)| (format!("jmp {str}"), Instr::Jump { address }));
 
-            // FIXME
-            let skip = iter::once(("skp zero_div".to_string(), Instr::Halt));
+            let skip = {
+                use itertools::Itertools;
+
+                const GREATER: &'static str = "greater";
+                const EQUAL: &'static str = "equal";
+                const OVERFLOW: &'static str = "overflow";
+                const ZERO_DIVISION: &'static str = "zero_division";
+                const ALL: [&'static str; 4] = [GREATER, EQUAL, OVERFLOW, ZERO_DIVISION];
+
+                iter::once(Vec::new())
+                    .chain(ALL.iter().permutations(1))
+                    .chain(ALL.iter().permutations(2))
+                    .chain(ALL.iter().permutations(3))
+                    .chain(ALL.iter().permutations(4))
+                    .map(|tags| {
+                        (
+                            {
+                                let mut instr = String::from("skp");
+                                for tag in &tags {
+                                    instr.push(' ');
+                                    instr.push_str(tag);
+                                }
+                                instr
+                            },
+                            Instr::Skip {
+                                due_to_greater: tags.contains(&&GREATER),
+                                due_to_equal: tags.contains(&&EQUAL),
+                                due_to_overflow: tags.contains(&&OVERFLOW),
+                                due_to_zero_division: tags.contains(&&ZERO_DIVISION),
+                            },
+                        )
+                    })
+            };
 
             let get = all_registers()
                 .map(|register| all_addresses().map(move |address| (register, address)))
