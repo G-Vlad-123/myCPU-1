@@ -158,8 +158,36 @@ impl UInt {
     #[must_use]
     /// # PANIC
     /// If `rhs` represents `0`
-    pub fn div_rem(self, _rhs: UInt) -> (UInt, UInt, Overflow) {
-        todo!("implement `UInt::div_rem`")
+    pub fn div_rem(self, rhs: UInt) -> (UInt, UInt) {
+        assert!(rhs != UInt::ZERO, "Divided {self:?} by 0");
+
+        println!("\ndiv_rem: {self:?} / {rhs:?}");
+
+        let mut reminder = self;
+        let mut result = UInt::ZERO;
+
+        #[cfg(false)]
+        let mut sub = |idx: usize| match reminder.sub(rhs.shl_impl(idx).0) {
+            (_, Overflow(bit::One)) => (),
+            (new_reminder, Overflow(bit::Zero)) => {
+                reminder = new_reminder;
+                result.inner[idx] = bit::One;
+            }
+        };
+
+        let mut sub = |idx: usize| match reminder.shr_impl(idx).0.cmp(rhs) {
+            std::cmp::Ordering::Less => (),
+            std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
+                reminder = reminder.sub(rhs.shl_impl(idx).0).0;
+                result.inner[idx] = bit::One;
+            }
+        };
+
+        for idx in (0..rhs.bit_length()).rev() {
+            sub(idx)
+        }
+
+        (result, reminder)
     }
 
     #[must_use]
@@ -227,6 +255,18 @@ impl UInt {
         }
 
         (UInt { inner: new }, overflow)
+    }
+
+    #[must_use]
+    /// Returns how many bits the number takes up.
+    fn bit_length(self) -> usize {
+        for idx in (0..4).rev() {
+            if self.inner[idx].is_one() {
+                return idx + 1;
+            }
+        }
+
+        0
     }
 }
 
@@ -391,8 +431,26 @@ mod testing {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
-    fn div_rem() {
-        unimplemented!()
+    fn div_rem_non_zero() {
+        fn test(x: u8, y: u8) {
+            let a = UInt::from_u8(x);
+            let b = UInt::from_u8(y);
+            let (result, reminder) = a.div_rem(b);
+
+            assert_eq!(result, UInt::from_u8(x / y), "{x} / {y}");
+            assert_eq!(reminder, UInt::from_u8(x % y), "{x} % {y}");
+        }
+
+        for x in 0..16 {
+            for y in 1..16 {
+                test(x, y)
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic = "Divided 0 by 0"]
+    fn div_rem_zero() {
+        let _ = UInt::ZERO.div_rem(UInt::ZERO);
     }
 }

@@ -330,7 +330,6 @@ impl CPU {
                 if let Some(rem) = rem {
                     *rem = result.1.into_word();
                 };
-                self.flags.overflow = result.2.0;
             };
 
         let invalid_register = |offset| {
