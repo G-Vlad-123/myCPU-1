@@ -383,7 +383,7 @@ mod testing {
             assert_eq!(o, o2, "overflow = {} for {x} * {y}", o2.0.is_one());
         }
 
-        for x in 1..16 {
+        for x in 0..16 {
             for y in 0..16 {
                 test(x, y)
             }
