@@ -161,25 +161,14 @@ impl UInt {
     pub fn div_rem(self, rhs: UInt) -> (UInt, UInt) {
         assert!(rhs != UInt::ZERO, "Divided {self:?} by 0");
 
-        println!("\ndiv_rem: {self:?} / {rhs:?}");
-
         let mut reminder = self;
         let mut result = UInt::ZERO;
-
-        #[cfg(false)]
-        let mut sub = |idx: usize| match reminder.sub(rhs.shl_impl(idx).0) {
-            (_, Overflow(bit::One)) => (),
-            (new_reminder, Overflow(bit::Zero)) => {
-                reminder = new_reminder;
-                result.inner[idx] = bit::One;
-            }
-        };
 
         let mut sub = |idx: usize| match reminder.shr_impl(idx).0.cmp(rhs) {
             std::cmp::Ordering::Less => (),
             std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
                 reminder = reminder.sub(rhs.shl_impl(idx).0).0;
-                result.inner[idx] = bit::One;
+                result.inner[3 - idx] = bit::One;
             }
         };
 

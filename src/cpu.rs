@@ -811,14 +811,14 @@ mod testing {
         assert_eq!(final_state.registers[2].into_u8(), 7 % 2, "%: const divident");
 
         //                                        r1 = 7;     r3 = 2;   d(r1, r1, r3);
-        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf2, 0xb1, 0x23])?;
+        let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf2, 0xb1, 0x13])?;
         assert_eq!(final_state.registers[1].into_u8(), 7 / 2, "/: div == rem");
-        assert_eq!(final_state.registers[2].into_u8(), 7 % 2, "%: div == rem");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: div == rem");
 
         //                                        r1 = 7;   d(r1, r1, 2);
         let final_state = CPU::create_and_run(&[0x11, 0xf7, 0xb1, 0x1f, 0x20])?;
-        assert_eq!(final_state.registers[1].into_u8(), 7 / 7, "/: div == rem && const divident");
-        assert_eq!(final_state.registers[2].into_u8(), 7 % 7, "%: div == rem && const divident");
+        assert_eq!(final_state.registers[1].into_u8(), 7 / 2, "/: div == rem && const divident");
+        assert_eq!(final_state.registers[2].into_u8(), 0, "%: div == rem && const divident");
 
         //                                        r1 = 7;     r3 = 0;   d(r1, r2, r3);
         let final_state = CPU::create_and_run(&[0x11, 0xf7, 0x13, 0xf0, 0xb1, 0x23])?;
@@ -933,7 +933,11 @@ mod testing {
             let final_state = skip_instruction![0x82, 0xf6];
             assert_ne!(final_state.registers[2].into_u8(), 6);
 
-            todo!("UInt::div_rem")
+            let final_state = skip_instruction![0xb1, 0x12];
+            assert_eq!(final_state.flags.zero_divison, bit::Zero);
+
+            let final_state = skip_instruction![0xb1, 0x1f, 0x00];
+            assert_eq!(final_state.flags.zero_divison, bit::Zero);
         }
 
         Ok(())
