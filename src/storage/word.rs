@@ -77,10 +77,13 @@ impl Word {
 
 impl std::fmt::Debug for Word {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match formatter.alternate() {
-            false => write!(formatter, "{:1X}", self.inner),
-            true => write!(formatter, "Word(0x{:1X})", self.inner),
-        }
+        write!(formatter, "Word(0x{:1X})", self.inner)
+    }
+}
+
+impl std::fmt::Display for Word {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{:1X}", self.inner)
     }
 }
 

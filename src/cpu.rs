@@ -558,6 +558,25 @@ pub enum CpuError {
     },
 }
 
+impl std::fmt::Display for CpuError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CpuError::InstructionOverflow => {
+                write!(f, "Reached the end of the address space without halting.")
+            }
+            CpuError::InvalidRegister {
+                address,
+                instruction,
+            } => {
+                write!(
+                    f,
+                    "The instruction at {instruction} tried to acced the invalid register F with the argument at {address}"
+                )
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
     Halt = 0b0000,

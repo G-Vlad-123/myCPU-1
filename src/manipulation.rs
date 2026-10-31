@@ -275,6 +275,15 @@ fn bit_add_with_overflow(
 
 impl std::fmt::Debug for UInt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match f.alternate() {
+            false => write!(f, "UInt({})", self.into_word()),
+            true => write!(f, "UInt{:?}", self.inner),
+        }
+    }
+}
+
+impl std::fmt::Display for UInt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.into_word().fmt(f)
     }
 }

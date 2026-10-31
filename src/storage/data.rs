@@ -116,6 +116,12 @@ impl Address {
     }
 }
 
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{high}{low}", high = self.high, low = self.low)
+    }
+}
+
 #[cfg(test)]
 mod testing {
     use super::*;
