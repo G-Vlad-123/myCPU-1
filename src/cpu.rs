@@ -577,6 +577,8 @@ impl std::fmt::Display for CpuError {
     }
 }
 
+impl std::error::Error for CpuError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
     Halt = 0b0000,

@@ -19,7 +19,7 @@ from another library other than those provided by `Bit` and those that I already
 6. I am allowed to ask for help! But it'd be best if I try to make things by myself with no help first. Help includes asking 
 another person or AI about something. Not manually reaserching documentation on how CPUs work.
 
-*Edit: I will allow myself to implement `Display` and there rules only apply to the main source, not the assembler as that is a different though adjecent project!*
+*Edit: I will allow myself to implement `Display` and `Error` and there rules only apply to the main source, not the assembler as that is a different though adjecent project!*
 
 # Clarifications
 Now there may have been some choices that I wanna preclarify before anyone asks (bdw if ur reading this thx sm!) ^v^
