@@ -51,6 +51,21 @@ impl Data {
         }
     }
 
+    pub fn from_file(path: impl AsRef<std::path::Path>) -> std::io::Result<Data> {
+        use std::io::Read;
+
+        let mut file = std::fs::File::open(path)?;
+
+        let mut data = Data::new();
+
+        let _ = file.read(unsafe {
+            // SAFETY: `Byte` is #[repr(transparent)]
+            std::mem::transmute(&mut *data.inner)
+        })?;
+
+        Ok(data)
+    }
+
     #[must_use]
     pub fn get_word(&self, addr: Address) -> Word {
         let idx = Idx::compute(addr);

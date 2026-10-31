@@ -1,6 +1,7 @@
 use crate::{bit, storage::word};
 use std::ops::BitAnd;
 
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Byte {
     inner: u8,

@@ -1,6 +1,7 @@
 mod bit;
 mod cpu;
 mod manipulation;
+mod output;
 mod storage;
 
 use tap::TapFallible;
@@ -29,6 +30,8 @@ fn main() -> Result<(), TopError> {
     cpu.run(&mut data)
         .tap_err(|err| println!("A fatal error occired: {err:?}"))
         .map_err(TopError::CpuError)?;
+
+    output::output(data);
 
     Ok(())
 }
