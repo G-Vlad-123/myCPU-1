@@ -16,6 +16,7 @@ pub struct CPU {
     debug_analysys: bool,
 }
 
+#[cfg(debug_assertions)]
 fn input(prompt: &str, expected: &[&str]) -> String {
     println!("{prompt}");
     let mut read = String::new();
