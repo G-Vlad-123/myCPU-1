@@ -51,14 +51,14 @@ pub enum ParseInstructionError {
         source: parsing::ParseRegisterError,
     },
 
-    ParseAddressHighWord {
+    ParseAddressLowWord {
         #[snafu(source)]
         source: parsing::ParseWordError,
     },
 
-    ParseAddressLowWord {
+    ParseConstChainLiteral {
         #[snafu(source)]
-        source: parsing::ParseWordError,
+        source: parsing::ParseLiteralError,
     },
 
     TooManyArguments {
@@ -149,18 +149,17 @@ mod parsing {
             fn address<'iter, 'str>(
                 iter: &'iter mut impl Iterator<Item = &'str str>,
             ) -> Result<values::Address, ParseInstructionError> {
-                Ok(values::Address {
-                    high: iter
-                        .next()
-                        .context(EarlyEOFSnafu)?
-                        .parse()
-                        .context(ParseAddressHighWordSnafu)?,
-                    low: iter
-                        .next()
-                        .context(EarlyEOFSnafu)?
-                        .parse()
-                        .context(ParseAddressLowWordSnafu)?,
-                })
+                let name = iter.next().context(EarlyEOFSnafu)?;
+
+                match name.parse() {
+                    Ok(high) if let Some(low) = iter.next() => Ok(values::Address::Hardcoded {
+                        high,
+                        low: low.parse().context(ParseAddressLowWordSnafu)?,
+                    }),
+                    _ => Ok(values::Address::Named {
+                        name: name.to_string(),
+                    }),
+                }
             }
 
             fn parse_skip<'iter, 'str>(
@@ -223,6 +222,10 @@ mod parsing {
                 "and" => IId::And,
                 "or" => IId::Or,
                 "xor" => IId::Xor,
+                "const" => IId::Const,
+
+                address_name if address_name.ends_with(":") => IId::AddressName,
+
                 _ => {
                     return Err(ParseInstructionError::MalformedKeyword {
                         string: keyword.to_string(),
@@ -288,6 +291,20 @@ mod parsing {
                 IId::Xor => Instruction::Xor {
                     register: next(&mut instruction)?,
                     value: next(&mut instruction)?,
+                },
+                IId::AddressName => Instruction::AddressName {
+                    name: keyword
+                        .strip_suffix(":")
+                        .expect(
+                            "This path should only be avalible when the \"keyword\" ends with ':'",
+                        )
+                        .to_string(),
+                },
+                IId::Const => Instruction::Const {
+                    constants: (&mut instruction)
+                        .map(str::parse::<values::Literal>)
+                        .collect::<Result<_, _>>()
+                        .context(ParseConstChainLiteralSnafu)?,
                 },
             };
 
@@ -446,8 +463,6 @@ mod testing {
     }
 
     mod parsing {
-        use snafu::ResultExt;
-
         use crate::tokens::{
             Instruction as Instr,
             values::{Address, test_prelude::*},
@@ -497,32 +512,27 @@ mod testing {
 
         fn template<
             S: AsRef<str>,
-            T: Copy
-                + PartialEq
-                + std::fmt::Debug
-                + std::str::FromStr<Err: 'static + std::error::Error>,
+            T: PartialEq + std::fmt::Debug + std::str::FromStr<Err: 'static + std::error::Error>,
         >(
             checks: impl IntoIterator<Item = (S, T)>,
         ) -> Result<(), ErrorDump<T>> {
             fn iteration<
-                T: Copy
-                    + PartialEq
-                    + std::fmt::Debug
-                    + std::str::FromStr<Err: 'static + std::error::Error>,
+                T: PartialEq + std::fmt::Debug + std::str::FromStr<Err: 'static + std::error::Error>,
             >(
                 string: impl AsRef<str>,
                 expected: T,
             ) -> Result<(), ErrorFragment<T>> {
-                let gotten_val =
-                    string
-                        .as_ref()
-                        .parse::<T>()
-                        .with_context(|_| ErrorFragmentSnafu {
-                            string: string.as_ref().to_string(),
-                            expected,
-                        })?;
-                assert_eq!(gotten_val, expected);
-                Ok(())
+                match string.as_ref().parse::<T>() {
+                    Ok(gotten_val) => {
+                        assert_eq!(gotten_val, expected);
+                        Ok(())
+                    }
+                    Err(source) => Err(ErrorFragment {
+                        source,
+                        string: string.as_ref().to_string(),
+                        expected,
+                    }),
+                }
             }
 
             let mut error_dump = ErrorDump::new();
@@ -616,7 +626,7 @@ mod testing {
                 .map(|(high, low)| {
                     (
                         format!("{} {}", high.0, low.0),
-                        Address {
+                        Address::Hardcoded {
                             high: high.1,
                             low: low.1,
                         },

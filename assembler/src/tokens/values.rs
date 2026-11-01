@@ -1,13 +1,3 @@
-pub trait AppendTo {
-    fn append_to(self, data: &mut Vec<Word>);
-}
-
-impl<T: Into<Word>> AppendTo for T {
-    fn append_to(self, data: &mut Vec<Word>) {
-        data.push(self.into())
-    }
-}
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Word {
@@ -29,7 +19,6 @@ pub enum Word {
     WF = 0xF,
 }
 
-#[cfg(test)]
 pub fn byte_to_pair(byte: u8) -> [Word; 2] {
     let first = byte.unbounded_shr(4);
     let second = byte & 0b1111;
@@ -155,36 +144,15 @@ impl From<Literal> for Value {
     }
 }
 
-impl AppendTo for Value {
-    fn append_to(self, data: &mut Vec<Word>) {
-        match self {
-            Self::Literal(literal) => {
-                data.push(Word::WF);
-                literal.append_to(data);
-            }
-            Self::Register(register) => register.append_to(data),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Address {
-    pub high: Word,
-    pub low: Word,
-}
-
-impl AppendTo for Address {
-    fn append_to(self, data: &mut Vec<Word>) {
-        self.high.append_to(data);
-        self.low.append_to(data);
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Address {
+    Hardcoded { high: Word, low: Word },
+    Named { name: String },
 }
 
 #[cfg(test)]
 pub(crate) mod test_prelude {
-    use crate::tokens::values::Address;
-
-    pub use super::{Literal, Register, Value, Word};
+    pub use super::{Address, Literal, Register, Value, Word};
 
     pub fn all_words() -> impl Iterator<Item = Word> {
         [
@@ -240,9 +208,9 @@ pub(crate) mod test_prelude {
         )
     }
 
-    pub fn all_addresses() -> impl Iterator<Item = Address> {
+    pub fn all_addresses() -> impl Iterator<Item = [Word; 2]> {
         all_words()
-            .map(|low| all_words().map(move |high| Address { high, low }))
+            .map(|low| all_words().map(move |high| [high, low]))
             .flatten()
     }
 }

@@ -1,10 +1,16 @@
-use crate::tokens::{
-    Instruction as Instr,
-    values::{AppendTo, Word},
-};
+use crate::tokens::{Instruction as Instr, values::Word};
+
+mod appendeture;
+use appendeture::{AppendData, Context};
 
 #[derive(Debug, snafu::Snafu)]
 pub enum WritingError {
+    #[snafu(context(false))]
+    InvalidAddressName {
+        #[snafu(source(from(exact)))]
+        source: appendeture::InvalidAddressName,
+    },
+
     #[snafu(context(false))]
     UnableToWriteToTarget {
         #[snafu(source(from(exact)))]
@@ -14,20 +20,48 @@ pub enum WritingError {
     UnableToWriteEverything,
 }
 
-pub fn write(
-    target: impl std::io::Write,
-    program: impl Iterator<Item = Instr>,
-) -> Result<(), WritingError> {
-    write_data(target, collect_data(program))
+impl From<!> for WritingError {
+    fn from(value: !) -> Self {
+        value
+    }
 }
 
-fn collect_data(program: impl Iterator<Item = Instr>) -> Vec<Word> {
+pub fn write(
+    target: impl std::io::Write,
+    program: impl Clone + Iterator<Item = Instr>,
+) -> Result<(), WritingError> {
+    write_data(target, collect_data(program)?)
+}
+
+fn collect_data(program: impl Clone + Iterator<Item = Instr>) -> Result<Vec<Word>, WritingError> {
     let mut data: Vec<Word> = Vec::new();
+
+    let ctx = {
+        let mut address: u8 = 0;
+        let mut ctx = Context::new();
+
+        for instruction in program.clone() {
+            let size = instruction.size();
+
+            let Instr::AddressName { name } = instruction else {
+                address += size;
+                continue;
+            };
+
+            let [high, low] = crate::tokens::values::byte_to_pair(address);
+
+            ctx.add_address_name(name, high, low);
+
+            address += size;
+        }
+
+        ctx
+    };
 
     macro_rules! append_to_data {
         ( $($word:expr),+ ) => {
             {$(
-                $word.append_to(&mut data);
+                $word.append_data(&ctx, &mut data)?;
             )+}
         };
     }
@@ -63,10 +97,16 @@ fn collect_data(program: impl Iterator<Item = Instr>) -> Vec<Word> {
             Instr::And { register, value } => append_to_data!(Word::WD, register, value),
             Instr::Or { register, value } => append_to_data!(Word::WE, register, value),
             Instr::Xor { register, value } => append_to_data!(Word::WF, register, value),
+            Instr::AddressName { .. } => (),
+            Instr::Const { constants } => {
+                for constant in constants {
+                    constant.append_data(&ctx, &mut data)?
+                }
+            }
         }
     }
 
-    data
+    Ok(data)
 }
 
 fn write_data(
@@ -90,8 +130,12 @@ mod testing {
         use crate::tokens::{Instruction as Instr, values::test_prelude::*};
         use crate::writer::collect_data;
 
-        fn template<const N: usize>(program: impl IntoIterator<Item = Instr>, expected: [Word; N]) {
-            let data = std::hint::black_box(collect_data(program.into_iter()));
+        fn template<const N: usize>(
+            program: impl IntoIterator<IntoIter: Clone, Item = Instr>,
+            expected: [Word; N],
+        ) {
+            let data = std::hint::black_box(collect_data(program.into_iter()))
+                .expect("No named addresses");
             assert_eq!(data, expected);
         }
 
@@ -99,14 +143,13 @@ mod testing {
             for register in all_registers() {
                 for value in all_registers() {
                     let instr = instr(register, Value::Register(value));
-                    template([instr], [instr.id().into(), register.into(), value.into()]);
+                    let id = instr.id().try_into().expect("id");
+                    template([instr], [id, register.into(), value.into()]);
                 }
                 for value in all_literals() {
                     let instr = instr(register, Value::Literal(value));
-                    template(
-                        [instr],
-                        [instr.id().into(), register.into(), Word::WF, value.into()],
-                    );
+                    let id = instr.id().try_into().expect("id");
+                    template([instr], [id, register.into(), Word::WF, value.into()]);
                 }
             }
         }
@@ -128,9 +171,12 @@ mod testing {
 
         #[test]
         fn jump() {
-            for address in all_addresses() {
-                let instr = Instr::Jump { address };
-                template([instr], [instr.id().into(), address.high, address.low]);
+            for [high, low] in all_addresses() {
+                let instr = Instr::Jump {
+                    address: Address::Hardcoded { high, low },
+                };
+                let id = instr.id().try_into().expect("id");
+                template([instr], [id, high, low]);
             }
         }
 
@@ -148,10 +194,11 @@ mod testing {
                                 due_to_overflow,
                                 due_to_zero_division,
                             };
+                            let id = instr.id().try_into().expect("id");
                             template(
                                 [instr],
                                 [
-                                    instr.id().into(),
+                                    id,
                                     [
                                         due_to_greater,
                                         due_to_equal,
@@ -170,17 +217,13 @@ mod testing {
         #[test]
         fn get() {
             for register in all_registers() {
-                for address in all_addresses() {
-                    let instr = Instr::Get { register, address };
-                    template(
-                        [instr],
-                        [
-                            instr.id().into(),
-                            register.into(),
-                            address.high,
-                            address.low,
-                        ],
-                    );
+                for [high, low] in all_addresses() {
+                    let instr = Instr::Get {
+                        register,
+                        address: Address::Hardcoded { high, low },
+                    };
+                    let id = instr.id().try_into().expect("id");
+                    template([instr], [id, register.into(), high, low]);
                 }
             }
         }
@@ -188,17 +231,13 @@ mod testing {
         #[test]
         fn set() {
             for register in all_registers() {
-                for address in all_addresses() {
-                    let instr = Instr::Set { register, address };
-                    template(
-                        [instr],
-                        [
-                            instr.id().into(),
-                            register.into(),
-                            address.high,
-                            address.low,
-                        ],
-                    );
+                for [high, low] in all_addresses() {
+                    let instr = Instr::Set {
+                        register,
+                        address: Address::Hardcoded { high, low },
+                    };
+                    let id = instr.id().try_into().expect("id");
+                    template([instr], [id, register.into(), high, low]);
                 }
             }
         }
@@ -233,14 +272,10 @@ mod testing {
                             remainder,
                             divident: Value::Register(divident),
                         };
+                        let id = instr.id().try_into().expect("id");
                         template(
                             [instr],
-                            [
-                                instr.id().into(),
-                                divisor.into(),
-                                remainder.into(),
-                                divident.into(),
-                            ],
+                            [id, divisor.into(), remainder.into(), divident.into()],
                         );
                     }
                     for divident in all_literals() {
@@ -249,10 +284,11 @@ mod testing {
                             remainder,
                             divident: Value::Literal(divident),
                         };
+                        let id = instr.id().try_into().expect("id");
                         template(
                             [instr],
                             [
-                                instr.id().into(),
+                                id,
                                 divisor.into(),
                                 remainder.into(),
                                 Word::WF,
