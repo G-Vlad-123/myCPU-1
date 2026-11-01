@@ -41,11 +41,17 @@ const INSTRUCTION_SIZE: u8 = 1;
 impl CPU {
     pub const REGISTER_COUNT: usize = 15;
 
-    pub fn new() -> CPU {
+    pub fn new(input_registers: impl IntoIterator<Item = storage::Word>) -> CPU {
+        let mut registers = [storage::Word::ZEROED; Self::REGISTER_COUNT];
+
+        for (idx, register) in input_registers.into_iter().take(15).enumerate() {
+            registers[idx] = register
+        }
+
         CPU {
             instruction_pointer: Address::NULL,
             flags: Flags::ZEROED,
-            registers: [storage::Word::ZEROED; CPU::REGISTER_COUNT],
+            registers,
 
             #[cfg(debug_assertions)]
             debug_analysys: if cfg!(any(feature = "force-debug", feature = "disable-debug")) {
@@ -511,7 +517,7 @@ impl CPU {
 
     #[cfg(test)]
     fn create_and_run(slice: &[u8]) -> Result<CPU, CpuError> {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(std::iter::empty());
         let mut data = storage::Data::from_slice(slice);
         cpu.run(&mut data).map(move |_| cpu)
     }
@@ -745,7 +751,7 @@ mod testing {
 
     #[test]
     fn set() -> Result<(), CpuError> {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(std::iter::empty());
         let mut data = storage::Data::from_slice(&[0x11, 0xff, 0x71, 0x66]);
         cpu.run(&mut data)?;
         assert_eq!(data.get_word(Address::from_u8(0x66)).into_u8(), 0xf);
@@ -754,7 +760,7 @@ mod testing {
 
     #[test]
     fn get() -> Result<(), CpuError> {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(std::iter::empty());
         let mut data = storage::Data::from_slice(&[0x11, 0xff, 0x71, 0x66, 0x62, 0x66]);
         cpu.run(&mut data)?;
         assert_eq!(cpu.registers[2].into_u8(), 0xf);
