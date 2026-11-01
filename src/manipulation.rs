@@ -159,7 +159,7 @@ impl UInt {
     /// # PANIC
     /// If `rhs` represents `0`
     pub fn div_rem(self, rhs: UInt) -> (UInt, UInt) {
-        assert!(rhs != UInt::ZERO, "Divided {self:?} by 0");
+        assert!(rhs != UInt::ZERO, "Divided {self} by 0");
 
         let mut reminder = self;
         let mut result = UInt::ZERO;
