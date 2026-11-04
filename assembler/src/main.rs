@@ -49,7 +49,7 @@ fn main() -> Result<(), TopError> {
     use tap::prelude::*;
 
     let path = std::env::args()
-        .nth(0)
+        .nth(1)
         .context(NoFilePathGivenSnafu)?
         .as_str()
         .pipe(AsRef::<std::path::Path>::as_ref)
@@ -68,8 +68,9 @@ fn main() -> Result<(), TopError> {
 
     let path = std::env::current_dir()
         .context(InaccsesableCurrentDirectorySnafu)?
-        .tap_mut(|path| path.set_file_name(file_name));
+        .tap_mut(|path| path.push(file_name));
 
+    println!("{}", path.display());
     let file = std::fs::File::create(&path).context(CouldNotCreateFileSnafu { path })?;
 
     writer::write(file, program.iter()).map_err(Into::into)

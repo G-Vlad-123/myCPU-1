@@ -21,7 +21,7 @@ impl std::fmt::Debug for TopError {
 }
 
 fn main() -> Result<(), TopError> {
-    let mut args = std::env::args();
+    let mut args = std::env::args().skip(1);
 
     let mut data = storage::data::Data::from_file(args.next().expect("No file provided"))
         .map_err(TopError::UnableToOpenData)?;
