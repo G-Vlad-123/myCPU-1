@@ -19,7 +19,7 @@ src/lib.rs
 **/mutants.out*/
 
 # The extension for the generated files by `assembler`
-.bin
+*.bin
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
