@@ -70,7 +70,6 @@ fn main() -> Result<(), TopError> {
         .context(InaccsesableCurrentDirectorySnafu)?
         .tap_mut(|path| path.push(file_name));
 
-    println!("{}", path.display());
     let file = std::fs::File::create(&path).context(CouldNotCreateFileSnafu { path })?;
 
     writer::write(file, program.iter()).map_err(Into::into)
