@@ -83,7 +83,7 @@ pub enum ParseInstructionSkipError {
 
 pub fn tokenize_file(source: impl std::io::Read) -> Result<tokens::Program, LexerError> {
     into_lines(source)
-        .filter(|r| r.as_ref().map(|s| !s.is_empty()).unwrap_or(true))
+        .filter(|r| r.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(true))
         .map(|r| {
             r.map(|s| s.parse::<Instruction>().map_err(Into::into))
                 .map_err(Into::into)
