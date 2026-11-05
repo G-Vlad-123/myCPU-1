@@ -3,7 +3,7 @@ mov r0 0
 Loop:
     set r0 _sum_reg
 
-    const 7 0 F
+    const 7 0 C
     _sum_reg:
         const 0
 
