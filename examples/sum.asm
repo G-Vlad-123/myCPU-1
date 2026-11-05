@@ -11,8 +11,9 @@ StoreLoop:
     _store_pos:
         const 0
 
-        add r0 1
-        skp overflow
+        sub r0 1
+        cmp r0 0
+        skp equal
         jmp StoreLoop
         jmp EndStoreLoop
 
@@ -25,7 +26,7 @@ SumLoop:
 
         add re rd
 
-        add r0 1
+        sub r0 1
         skp overflow
         jmp SumLoop
         jmp EndSumLoop
@@ -33,11 +34,11 @@ SumLoop:
 Start:
         set r0 A 0
 
-        mov r0 1
+        mov r0 E
         jmp StoreLoop
 
     EndStoreLoop:
-        mov r0 0
+        mov r0 E
         mov re 0
         jmp SumLoop
 
