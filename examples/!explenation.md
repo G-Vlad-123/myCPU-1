@@ -71,6 +71,19 @@ no arguments
 Prints in the first 2 rows every possible colour, in order of their
 coresponding value.
 
+### pattern.asm
+1 argument
+
+Displays a pattern depeanding on the given argument.
+
+### number.asm
+1-2 arguments
+
+Displays the decimal number representing the 1st given argument
+The 2nd (optional) argument sets the colour of the number.
+If the 2nd argument is black (0) or it's not given it automaticly
+registers as white.
+
 ### sum.asm
 0-15 arguments
 
