@@ -72,9 +72,9 @@ Prints in the first 2 rows every possible colour, in order of their
 coresponding value.
 
 ### pattern.asm
-1 argument
+no arguments
 
-Displays a pattern depeanding on the given argument.
+Displays a nice image.
 
 ### number.asm
 1-2 arguments
